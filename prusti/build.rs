@@ -36,4 +36,9 @@ fn main() {
     }
 
     println!("cargo:rustc-env=BUILD_TIME={}", Utc::now().format("%F %T %Z"));
+
+    println!(
+        "cargo:rustc-env=RUSTUP_TOOLCHAIN={}", 
+        include_str!("../rust-toolchain").trim()
+    );    
 }
