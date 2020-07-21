@@ -22,14 +22,8 @@ use std::env;
 use std::path::Path;
 use std::process::exit;
 use prusti_interface::cargo::is_rustc_compiling_a_dependency_crate;
-use std::io;
 
 pub fn main() {
-    // println!("{:?}", env::var("RUSTUP_TOOLCHAIN"));
-    // let mut debugString = String::new();
-    // println!("Hello, please input something!");
-    // io::stdin().read_line(& mut debugString).unwrap();
-    // println!("Hello, {}", debugString);
     env_logger::init();
     let exit_status = run(move || {
         let mut args: Vec<_> = env::args().collect();
