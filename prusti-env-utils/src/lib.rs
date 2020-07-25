@@ -61,7 +61,10 @@ pub fn collect_crate_artefacts(
 ) -> Vec<walkdir::DirEntry> {
     let walker = walkdir::WalkDir::new(path).follow_links(true);
 
-    let file_prefix = format!("lib{}-", crate_name);
+    let mut file_prefix = format!("lib{}-", crate_name);
+    if file_extension == "dll" && crate_name == "prusti_contracts_internal" {
+        file_prefix = format!("{}", crate_name);
+    }
 
     let mut candidates = Vec::new();
     for entry in walker {
@@ -98,13 +101,13 @@ pub fn construct_rustc_extern_arg(crate_name: &str, file_path: &Path) -> String 
 
 /// Find the crate artefact that has the latest timestamp.
 pub fn get_latest_crate_artefact(path: &Path, crate_name: &str, file_extension: &str) -> String {
-    println!("finding {} {} {}", path.display(), crate_name, file_extension);
+    // println!("finding {} {} {}", path.display(), crate_name, file_extension);
     // let mut s = String::new();
     // std::io::stdin().read_line(&mut s).expect("unable to read input");
     // println!("{}", s);
     let candidates = collect_crate_artefacts(path, crate_name, file_extension);
 
-    println!("{:?}", candidates);
+    // println!("{:?}", candidates);
     let file_path = candidates
         .iter()
         .max_by_key(|entry| entry.metadata().unwrap().modified().unwrap())

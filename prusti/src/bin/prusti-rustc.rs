@@ -64,9 +64,15 @@ fn process(mut args: Vec<String>) -> Result<(), i32> {
         let prusti_contracts_path =
             get_latest_crate_artefact(&prusti_home, "prusti_contracts", "rlib");
         cmd.arg(format!("prusti_contracts={}", prusti_contracts_path));
-        // changed to dll from so
+        // On windows, we have to change file extension to dll
+        // Furthermore, the file lib prefix does not appear.
+        let mut prusti_internal_path_extension = "so";
+        if cfg!(windows) {
+            prusti_internal_path_extension = "dll"
+        }
         let prusti_internal_path =
-            get_latest_crate_artefact(&prusti_home, "prusti_contracts_internal", "dll");
+            get_latest_crate_artefact(&prusti_home, "prusti_contracts_internal",
+                                      prusti_internal_path_extension);
         cmd.arg("--extern");
         cmd.arg(format!(
             "prusti_contracts_internal={}",
