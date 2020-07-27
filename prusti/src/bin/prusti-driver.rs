@@ -7,6 +7,7 @@ use log::debug;
 use prusti::PrustiCompilerCalls;
 use std::env;
 use prusti_interface::config::ConfigFlags;
+use std::io::{stdin, stdout, Read, Write};
 
 /// Initialize Prusti and the Rust compiler loggers.
 fn init_loggers() {
@@ -17,7 +18,15 @@ fn init_loggers() {
     rustc_driver::init_rustc_env_logger();
 }
 
+fn pause() {
+    let mut stdout = stdout();
+    stdout.write(b"Press Enter to continue...").unwrap();
+    stdout.flush().unwrap();
+    stdin().read(&mut [0]).unwrap();
+}
+
 fn main() {
+    pause();
     rustc_driver::install_ice_hook();
 
     // If the environment asks us to actually be rustc, then do that.
