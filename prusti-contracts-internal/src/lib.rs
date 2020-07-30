@@ -22,3 +22,8 @@ pub fn pure(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 pub fn invariant(tokens: TokenStream) -> TokenStream {
     prusti_specs::invariant(tokens.into()).into()
 }
+
+#[proc_macro_hack]
+pub fn thread_ensures(tokens: TokenStream) -> TokenStream {
+    prusti_specs::thread_ensures(tokens.into()).into()
+}

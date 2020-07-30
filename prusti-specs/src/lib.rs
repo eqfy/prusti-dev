@@ -7,6 +7,15 @@ use quote::quote;
 mod rewriter;
 pub mod specifications;
 
+use std::io::{stdin, stdout, Read, Write};
+fn pause() {
+    let mut stdout = stdout();
+    stdout.write(b"Press Enter to continue sfafdf...").unwrap();
+    stdout.flush().unwrap();
+    stdin().read(&mut [0]).unwrap();
+}
+
+
 macro_rules! handle_result {
     ($parse_result: expr) => {
         match $parse_result {
@@ -22,6 +31,7 @@ pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
+    pause();
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Precondition, spec_id, assertion, &item));
     quote! {
@@ -54,6 +64,18 @@ pub fn pure(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 }
 
 pub fn invariant(tokens: TokenStream) -> TokenStream {
+    let mut rewriter = rewriter::AstRewriter::new();
+    let spec_id = rewriter.generate_spec_id();
+    let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
+    let check = rewriter.generate_spec_loop(spec_id, invariant);
+    quote! {
+        if false {
+            #check
+        }
+    }
+}
+
+pub fn thread_ensures(tokens: TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
     let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));

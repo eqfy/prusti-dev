@@ -23,3 +23,6 @@ pub fn pure(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 pub fn invariant(_tokens: TokenStream) -> TokenStream {
     (quote! { () }).into()
 }
+
+#[proc_macro_hack]
+pub fn thread_ensures (_tokens: TokenStream) -> TokenStream { (quote! { () }).into() }
