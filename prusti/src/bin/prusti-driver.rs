@@ -7,7 +7,6 @@ use log::debug;
 use prusti::PrustiCompilerCalls;
 use std::env;
 use prusti_common::config::ConfigFlags;
-use prusti_interface::config::ConfigFlags;
 use std::io::{stdin, stdout, Read, Write};
 
 /// Initialize Prusti and the Rust compiler loggers.

@@ -31,14 +31,17 @@ pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
-    pause();
+    // pause();
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Precondition, spec_id, assertion, &item));
-    quote! {
+    let a = quote! {
         #spec_item
         #[prusti::pre_spec_id_ref = #spec_id_str]
         #item
-    }
+    };
+    // println!("{}", a);
+    // pause();
+    a
 }
 
 pub fn ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
@@ -49,11 +52,14 @@ pub fn ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Postcondition, spec_id, assertion, &item));
-    quote! {
+    let a = quote! {
         #spec_item
         #[prusti::post_spec_id_ref = #spec_id_str]
         #item
-    }
+    };
+    // pause();
+    // println!("{}", a);
+    a
 }
 
 pub fn after_expiry(attr: TokenStream, tokens: TokenStream) -> TokenStream {
@@ -98,11 +104,14 @@ pub fn invariant(tokens: TokenStream) -> TokenStream {
     let spec_id = rewriter.generate_spec_id();
     let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
     let check = rewriter.generate_spec_loop(spec_id, invariant);
-    quote! {
+    let a = quote! {
         if false {
             #check
         }
-    }
+    };
+    println!("{}", a);
+    pause();
+    a
 }
 
 pub fn thread_ensures(tokens: TokenStream) -> TokenStream {
