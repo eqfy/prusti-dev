@@ -8,7 +8,7 @@ use prusti_interface::{
 };
 use prusti_viper::verifier::Verifier;
 use rustc_middle::ty::TyCtxt;
-use prusti_interface::config::ConfigFlags;
+use prusti_common::config::ConfigFlags;
 use prusti_common::report::user;
 
 
@@ -44,8 +44,8 @@ pub fn verify<'tcx>(flags: ConfigFlags, tcx: TyCtxt<'tcx>, spec: typed::Specific
         let verification_result = if verification_task.procedures.is_empty() {
             VerificationResult::Success
         } else {
-            //         debug!("Dump borrow checker info...");
-            //         env.dump_borrowck_info(&verification_task.procedures);
+            debug!("Dump borrow checker info...");
+            env.dump_borrowck_info(&verification_task.procedures);
 
             let mut verifier = Verifier::new(&env, &spec);
             let verification_result = verifier.verify(&verification_task);

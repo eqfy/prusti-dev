@@ -342,6 +342,112 @@ pub enum PoloniusInfoError {
     MagicWandHasNoRepresentativeLoan(mir::Location),
 }
 
+pub fn graphviz<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    def_path: &rustc_hir::definitions::DefPath,
+    mir: &mir::Body<'tcx>,
+) {
+    macro_rules! to_html {
+        ( $o:expr ) => {{
+            format!("{:?}", $o)
+                .replace("{", "\\{")
+                .replace("}", "\\}")
+                .replace("&", "&amp;")
+                .replace(">", "&gt;")
+                .replace("<", "&lt;")
+                .replace("\n", "<br/>")
+        }};
+    }
+    macro_rules! to_sorted_string {
+        ( $o:expr ) => {{
+            let mut vector = $o.iter().map(|x| to_html!(x)).collect::<Vec<String>>();
+            vector.sort();
+            vector.join(", ")
+        }};
+    }
+
+    let facts_loader = load_polonius_facts(tcx, def_path);
+    let interner = facts_loader.interner;
+    let borrowck_in_facts = facts_loader.facts;
+    let borrowck_out_facts = Output::compute(&borrowck_in_facts, Algorithm::Naive, true);
+
+    use std::io::Write;
+    let graph_path = PathBuf::from("nll-facts")
+            .join(def_path.to_filename_friendly_no_crate())
+            .join("polonius.dot");
+    let graph_file = std::fs::File::create(graph_path).expect("Unable to create file");
+    let mut graph = std::io::BufWriter::new(graph_file);
+
+    let mut blocks: HashMap<_, _> = HashMap::new();
+    let mut block_edges = HashSet::new();
+    for (from_index, to_index) in borrowck_in_facts.cfg_edge {
+        let from = interner.get_point(from_index);
+        let from_block = from.location.block;
+        let to = interner.get_point(to_index);
+        let to_block = to.location.block;
+        let from_points = blocks.entry(from_block).or_insert(HashSet::new());
+        from_points.insert(from_index);
+        let to_points = blocks.entry(to_block).or_insert(HashSet::new());
+        to_points.insert(to_index);
+        if from_block != to_block {
+            block_edges.insert((from_block, to_block));
+        }
+    }
+
+    write!(graph, "digraph G {{\n");
+    write!(graph, "general [ shape=\"record\" ");
+    write!(graph, "label =<<table>\n");
+    write!(
+        graph,
+        "<tr><td>universal region:</td><td>{}</td></tr>\n",
+        to_sorted_string!(borrowck_in_facts.universal_region)
+    );
+    write!(
+        graph,
+        "<tr><td>placeholder:</td><td>{}</td></tr>\n",
+        to_sorted_string!(borrowck_in_facts.placeholder)
+    );
+    write!(graph, "</table>>];\n\n");
+    for (block, point_indices) in blocks {
+        write!(graph, "node_{:?} [ shape=\"record\" ", block);
+        write!(graph, "label =<<table>");
+        write!(graph, "<th><td>{:?}</td></th>\n", block);
+        write!(graph, "<tr>");
+        write!(graph, "<td>point</td>");
+        write!(graph, "<td>borrow_live_at</td>");
+        write!(graph, "</tr>\n");
+        let mut points: Vec<_> = point_indices.iter().map(|index| interner.get_point(*index)).collect();
+        points.sort();
+        for point in points {
+            write!(graph, "<tr>\n");
+            write!(graph, "<td>{}</td>\n", point);
+            write!(graph, "<td>");
+            let point_index = interner.get_point_index(&point);
+            for loan in &borrowck_out_facts.borrow_live_at[&point_index] {
+                write!(graph, "{:?},", loan);
+            }
+            write!(graph, "</td>");
+            write!(graph, "</tr>\n");
+        }
+        write!(graph, "</table>>];\n\n");
+    }
+    for (from, to) in block_edges {
+        write!(graph, "node_{:?} -> node_{:?};\n", from, to);
+    }
+    write!(graph, "}}\n");
+}
+
+fn load_polonius_facts<'tcx>(
+    tcx: rustc_middle::ty::TyCtxt<'tcx>,
+    def_path: &rustc_hir::definitions::DefPath,
+) -> facts::FactLoader {
+    let dir_path = PathBuf::from("nll-facts").join(def_path.to_filename_friendly_no_crate());
+    debug!("Reading facts from: {:?}", dir_path);
+    let mut facts_loader = facts::FactLoader::new();
+    facts_loader.load_all_facts(&dir_path);
+    facts_loader
+}
+
 pub struct PoloniusInfo<'a, 'tcx: 'a> {
     pub(crate) mir: &'a mir::Body<'tcx>,
     pub(crate) borrowck_in_facts: facts::AllInputFacts,
@@ -491,7 +597,13 @@ fn get_borrowed_places<'a, 'tcx: 'a>(
     loan_position: &HashMap<facts::Loan, mir::Location>,
     loan: facts::Loan,
 ) -> Vec<&'a mir::Place<'tcx>> {
-    let location = loan_position.get(&loan).unwrap_or_else(|| panic!("not found: {:?}", loan));
+    let location = if let Some(location) = loan_position.get(&loan) {
+        location
+    } else {
+        // FIXME (Vytautas): This is likely to be wrong.
+        debug!("Not found: {:?}", loan);
+        return Vec::new();
+    };
     let mir::BasicBlockData { ref statements, .. } = mir[location.block];
     if statements.len() == location.statement_index {
         Vec::new()
@@ -586,13 +698,10 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
         let tcx = procedure.get_tcx();
         let def_id = procedure.get_id();
         let mir = procedure.get_mir();
+        let def_path = tcx.hir().def_path(def_id.expect_local());
 
         // Read Polonius facts.
-        let def_path = tcx.hir().def_path(def_id.expect_local());
-        let dir_path = PathBuf::from("nll-facts").join(def_path.to_filename_friendly_no_crate());
-        debug!("Reading facts from: {:?}", dir_path);
-        let mut facts_loader = facts::FactLoader::new();
-        facts_loader.load_all_facts(&dir_path);
+        let facts_loader = load_polonius_facts(tcx, &def_path);
 
         // Read relations between region IDs and local variables.
         let renumber_path = PathBuf::from(format!(
@@ -773,15 +882,15 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
             .unwrap_or(Vec::new())
     }
 
-//     /// Get loans that dye at the given location.
-//     pub(crate) fn get_dying_loans(&self, location: mir::Location) -> Vec<facts::Loan> {
-//         self.get_loans_dying_at(location, false)
-//     }
+    /// Get loans that dye at the given location.
+    pub(crate) fn get_dying_loans(&self, location: mir::Location) -> Vec<facts::Loan> {
+        self.get_loans_dying_at(location, false)
+    }
 
-//     /// Get loans that dye at the given location.
-//     pub(crate) fn get_dying_zombie_loans(&self, location: mir::Location) -> Vec<facts::Loan> {
-//         self.get_loans_dying_at(location, true)
-//     }
+    /// Get loans that dye at the given location.
+    pub(crate) fn get_dying_zombie_loans(&self, location: mir::Location) -> Vec<facts::Loan> {
+        self.get_loans_dying_at(location, true)
+    }
 
     /// Get loans including the zombies ``(all_loans, zombie_loans)``.
     pub fn get_all_active_loans(
@@ -1023,7 +1132,9 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
     }
 
     pub fn get_loan_location(&self, loan: &facts::Loan) -> mir::Location {
-        self.loan_position[loan].clone()
+        self.loan_position.get(loan).unwrap_or_else(
+            || {panic!("not found: {:?}", loan)}
+        ).clone()
     }
 
     pub fn get_loan_at_location(&self, location: mir::Location) -> facts::Loan {
@@ -1088,17 +1199,17 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
         roots
     }
 
-//     /// Find a variable that has the given region in its type.
-//     pub fn find_variable(&self, region: facts::Region) -> Option<mir::Local> {
-//         let mut local = None;
-//         for (key, value) in self.variable_regions.iter() {
-//             if *value == region {
-//                 assert!(local.is_none());
-//                 local = Some(*key);
-//             }
-//         }
-//         local
-//     }
+    /// Find a variable that has the given region in its type.
+    pub fn find_variable(&self, region: facts::Region) -> Option<mir::Local> {
+        let mut local = None;
+        for (key, value) in self.variable_regions.iter() {
+            if *value == region {
+                assert!(local.is_none());
+                local = Some(*key);
+            }
+        }
+        local
+    }
 
 //     /// Find variable that was moved into the function.
 //     pub fn get_moved_variable(&self, kind: &ReborrowingKind) -> mir::Local {
@@ -1133,19 +1244,19 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
         )
     }
 
-//     pub fn construct_reborrowing_dag_loop_body(
-//         &self,
-//         loans: &[facts::Loan],
-//         zombie_loans: &[facts::Loan],
-//         location: mir::Location,
-//     ) -> Result<ReborrowingDAG, PoloniusInfoError> {
-//         self.construct_reborrowing_dag_custom_reborrows(
-//             loans,
-//             zombie_loans,
-//             location,
-//             &self.additional_facts_no_back.reborrows_direct,
-//         )
-//     }
+    pub fn construct_reborrowing_dag_loop_body(
+        &self,
+        loans: &[facts::Loan],
+        zombie_loans: &[facts::Loan],
+        location: mir::Location,
+    ) -> Result<ReborrowingDAG, PoloniusInfoError> {
+        self.construct_reborrowing_dag_custom_reborrows(
+            loans,
+            zombie_loans,
+            location,
+            &self.additional_facts_no_back.reborrows_direct,
+        )
+    }
 
     /// Get loops in which loans are defined (if any).
     pub fn get_loan_loops(
@@ -1155,7 +1266,13 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
         let pairs: Vec<_> = loans
             .iter()
             .flat_map(|loan| {
-                let loan_location = self.loan_position[loan];
+                let loan_location = if let Some(location) = self.loan_position.get(loan) {
+                    location
+                } else {
+                    // FIXME (Vytautas): This is likely to be wrong.
+                    debug!("ERROR: not found for loan: {:?}", loan);
+                    return None;
+                };
                 self.loops
                     .get_loop_head(loan_location.block)
                     .map(|loop_head| (*loan, loop_head))
@@ -1194,7 +1311,12 @@ impl<'a, 'tcx: 'a> PoloniusInfo<'a, 'tcx> {
             location
         );
 
-        let mut loans: Vec<_> = loans.iter().cloned().collect();
+        let mut loans: Vec<_> = loans.iter().filter(|loan| {
+            // FIXME: This is most likely wrong. Filtering out placeholder loans.
+            self.borrowck_in_facts.placeholder.iter().all(
+                |(_origin, placeholder_loan)| placeholder_loan != *loan
+            )
+        }).cloned().collect();
 
         // The representative_loan is a loan that is the root of the
         // reborrowing in some loop. Since it has no proper
