@@ -113,28 +113,12 @@ impl<'tcx, L: fmt::Debug, P: fmt::Debug> ProcedureContractGeneric<'tcx, L, P> {
         }
     }
 
-    pub fn pledges(&self) -> Vec<(Option<typed::Expression>, typed::Assertion<'tcx>, typed::Assertion<'tcx>)> {
-        let mut pledges = Vec::new();
-        fn check_assertion<'tcx>(
-            assertion: &typed::Assertion<'tcx>,
-            pledges: &mut Vec<(Option<typed::Expression>, typed::Assertion<'tcx>, typed::Assertion<'tcx>)>,
-        ) {
-            match assertion.kind.as_ref() {
-                typed::AssertionKind::Expr(_)
-                | typed::AssertionKind::Implies(_, _)
-                | typed::AssertionKind::TypeCond(_, _)
-                | typed::AssertionKind::ForAll(_, _, _) => {}
-                typed::AssertionKind::And(ref assertions) => {
-                    for assertion in assertions {
-                        check_assertion(assertion, pledges);
-                    }
-                }
-            };
+    pub fn pledges(&self) -> &[typed::Pledge<'tcx>] {
+        if let typed::SpecificationSet::Procedure(spec) = &self.specification {
+            &spec.pledges
+        } else {
+            unreachable!("Unexpected: {:?}", self.specification)
         }
-        for assertion in self.functional_postcondition() {
-            check_assertion(assertion, &mut pledges);
-        }
-        pledges
     }
 }
 
@@ -402,6 +386,7 @@ where
     let mut fake_mir_args_ty = Vec::new();
 
     // FIXME; "skip_binder" is most likely wrong
+    // FIXME: Replace with FakeMirEncoder.
     for i in 0usize..fn_sig.inputs().skip_binder().len() {
         fake_mir_args.push(mir::Local::from_usize(i + 1));
         let arg_ty = fn_sig.input(i);
@@ -413,7 +398,7 @@ where
         };
         fake_mir_args_ty.push(ty);
     }
-    let return_ty = fn_sig.output().skip_binder().clone();
+    let return_ty = fn_sig.output().skip_binder().clone();  // FIXME: Shouldn't this also go through maybe_tymap?
 
     let mut visitor = BorrowInfoCollectingVisitor::new(tcx);
     for (arg, arg_ty) in fake_mir_args.iter().zip(fake_mir_args_ty) {

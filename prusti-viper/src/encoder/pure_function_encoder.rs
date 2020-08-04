@@ -9,7 +9,7 @@ use crate::encoder::builtin_encoder::BuiltinFunctionKind;
 use crate::encoder::errors::PanicCause;
 use crate::encoder::errors::{EncodingError, ErrorCtxt};
 use crate::encoder::foldunfold;
-use crate::encoder::mir_encoder::MirEncoder;
+use crate::encoder::mir_encoder::{MirEncoder, PlaceEncoder};
 use crate::encoder::mir_encoder::{PRECONDITION_LABEL, WAND_LHS_LABEL};
 use crate::encoder::mir_interpreter::{
     run_backward_interpretation, BackwardMirInterpreter, MultiExprBackwardInterpreterState,
@@ -369,11 +369,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> PureFunctionEncoder<'p, 'v, 'tcx> {
         let ty = self.encoder.resolve_typaram(self.mir.return_ty());
         self.encoder.encode_value_type(ty)
     }
-
-    pub fn encode_function_ref_return_type(&self) -> vir::Type {
-        let ty = self.encoder.resolve_typaram(self.mir.return_ty());
-        self.encoder.encode_value_or_ref_type(ty)
-    }
 }
 
 pub(super) struct PureFunctionBackwardInterpreter<'p, 'v: 'p, 'tcx: 'v> {
@@ -642,7 +637,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                         .collect();
 
                     match full_func_proc_name {
-                        "prusti_contracts::internal::old" => {
+                        "prusti_contracts::old" => {
                             trace!("Encoding old expression {:?}", args[0]);
                             assert_eq!(args.len(), 1);
                             let encoded_rhs = self
@@ -653,7 +648,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> BackwardMirInterpreter<'tcx>
                             state
                         }
 
-                        "prusti_contracts::internal::before_expiry" => {
+                        "prusti_contracts::before_expiry" => {
                             trace!("Encoding before_expiry expression {:?}", args[0]);
                             assert_eq!(args.len(), 1);
                             let encoded_rhs = self

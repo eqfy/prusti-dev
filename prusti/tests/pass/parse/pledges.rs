@@ -36,6 +36,7 @@ fn borrows_fail(_x: &mut u32) {
     assert!(a.f == 6);
 }
 
+#[after_expiry(result => before_expiry(*result) == x.f)]
 fn reborrow<'a>(x: &'a mut T) -> &'a mut u32 {
     &mut x.f
 }
@@ -49,6 +50,7 @@ fn reborrow_caller(a: T) {
     let x = &mut a;
     let y = reborrow(x);
     *y = 5;
+    assert!(a.f == 5);
 }
 
 fn main() {}
