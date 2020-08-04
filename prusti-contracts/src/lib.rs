@@ -26,6 +26,8 @@ mod private {
     /// A macro for writing a postcondition on a thread.
     #[proc_macro_hack]
     pub use prusti_contracts_impl::thread_ensures;
+
+    // pub use prusti_contracts_impl::attr_test;
 }
 
 #[cfg(feature = "prusti")]
@@ -54,6 +56,10 @@ mod private {
     /// A macro for writing a postcondition on a thread.
     #[proc_macro_hack]
     pub use prusti_contracts_internal::thread_ensures;
+
+    pub use prusti_contracts_internal::attr_test;
+
+    pub use prusti_contracts_internal::attr_test1;
 }
 
 pub use private::*;

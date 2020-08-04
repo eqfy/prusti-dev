@@ -36,3 +36,13 @@ pub fn invariant(_tokens: TokenStream) -> TokenStream {
 
 #[proc_macro_hack]
 pub fn thread_ensures (_tokens: TokenStream) -> TokenStream { (quote! { () }).into() }
+
+#[proc_macro_attribute]
+pub fn attr_test(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    tokens
+}
+
+#[proc_macro_attribute]
+pub fn attr_test1(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    tokens
+}

@@ -198,6 +198,7 @@ impl<'tcx> intravisit::Visitor<'tcx> for SpecCollector<'tcx> {
             self.spec_items.push(spec_item);
         }
     }
+    // This is used for functions and closures
     fn visit_fn(
         &mut self,
         fn_kind: intravisit::FnKind<'tcx>,
@@ -206,10 +207,15 @@ impl<'tcx> intravisit::Visitor<'tcx> for SpecCollector<'tcx> {
         span: Span,
         id: rustc_hir::hir_id::HirId,
     ) {
+        // println!("{:?}", self.current_spec_item);
         if self.current_spec_item.is_some() {
+            // println!("{:?}", read_attr("spec_id", fn_kind.attrs()));
+            // println!("aaaaaaaaaaaaaa");
             if read_attr("spec_id", fn_kind.attrs()).is_none() {
+                // expr_id looks like UUID_101
                 let expr_id = read_attr("expr_id", fn_kind.attrs()).unwrap();
                 let local_id = self.tcx.hir().local_def_id(id);
+                println!("{}           {:?}", expr_id, local_id);
                 self.typed_expressions.insert(expr_id, local_id);
             }
         }

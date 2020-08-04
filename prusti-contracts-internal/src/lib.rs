@@ -37,3 +37,13 @@ pub fn invariant(tokens: TokenStream) -> TokenStream {
 pub fn thread_ensures(tokens: TokenStream) -> TokenStream {
     prusti_specs::thread_ensures(tokens.into()).into()
 }
+
+#[proc_macro_attribute]
+pub fn attr_test(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    prusti_specs::attr_test(attr.into(), tokens.into()).into()
+}
+
+#[proc_macro_attribute]
+pub fn attr_test1(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    prusti_specs::attr_test(attr.into(), tokens.into()).into()
+}
