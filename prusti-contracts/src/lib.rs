@@ -27,10 +27,7 @@ mod private {
     pub use prusti_contracts_impl::invariant;
 
     /// A macro for writing a postcondition on a thread.
-    #[proc_macro_hack]
-    pub use prusti_contracts_impl::thread_ensures;
-
-    // pub use prusti_contracts_impl::attr_test;
+    pub use prusti_contracts_impl::t_ensures;
 }
 
 #[cfg(feature = "prusti")]
@@ -60,12 +57,7 @@ mod private {
     pub use prusti_contracts_internal::invariant;
 
     /// A macro for writing a postcondition on a thread.
-    #[proc_macro_hack]
-    pub use prusti_contracts_internal::thread_ensures;
-
-    pub use prusti_contracts_internal::attr_test;
-
-    pub use prusti_contracts_internal::attr_test1;
+    pub use prusti_contracts_internal::t_ensures;
 }
 
 

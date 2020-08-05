@@ -145,4 +145,25 @@ impl AstRewriter {
             };
         }
     }
+    /// Generate statements for checking the given thread postcondition.
+    pub fn generate_spec_thread(
+        &mut self,
+        spec_id: untyped::SpecificationId,
+        assertion: untyped::Assertion,
+    ) -> TokenStream {
+        let mut statements = TokenStream::new();
+        assertion.encode_type_check(&mut statements);
+        let spec_id_str = spec_id.to_string();
+        let assertion_json = crate::specifications::json::to_json_string(&assertion);
+        quote! {
+            let result = closure();
+            #[prusti::spec_only]
+            #[prusti::spec_id = #spec_id_str]
+            #[prusti::assertion = #assertion_json]
+            let _prusti_thread_postcondition =
+            {
+                #statements
+            };
+        }
+    }
 }

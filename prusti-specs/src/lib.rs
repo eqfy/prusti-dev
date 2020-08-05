@@ -10,14 +10,6 @@ use specifications::untyped;
 mod rewriter;
 pub mod specifications;
 
-use std::io::{stdin, stdout, Read, Write};
-fn pause() {
-    let mut stdout = stdout();
-    stdout.write(b"Press Enter to continue sfafdf...").unwrap();
-    stdout.flush().unwrap();
-    stdin().read(&mut [0]).unwrap();
-}
-
 
 macro_rules! handle_result {
     ($parse_result: expr) => {
@@ -29,23 +21,18 @@ macro_rules! handle_result {
 }
 
 pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    println!("{}  {} \n\n", attr, tokens);
     let item: syn::ItemFn = handle_result!(syn::parse2(tokens));
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
-    // pause();
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Precondition, spec_id, assertion, &item));
-    let a = quote! {
+    quote! {
         #spec_item
         #[prusti::pre_spec_id_ref = #spec_id_str]
         #item
-    };
-    // println!("{}", a);
-    // pause();
-    a
+    }
 }
 
 pub fn ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
@@ -56,14 +43,11 @@ pub fn ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Postcondition, spec_id, assertion, &item));
-    let a = quote! {
+    quote! {
         #spec_item
         #[prusti::post_spec_id_ref = #spec_id_str]
         #item
-    };
-    // pause();
-    // println!("{}", a);
-    a
+    }
 }
 
 /// Check if the given expression is identifier `result`.
@@ -140,21 +124,6 @@ pub fn invariant(tokens: TokenStream) -> TokenStream {
     println!("{} \n\n", tokens);
     let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
     let check = rewriter.generate_spec_loop(spec_id, invariant);
-    let a = quote! {
-        if false {
-            #check
-        }
-    };
-    println!("{}", a);
-    pause();
-    a
-}
-
-pub fn thread_ensures(tokens: TokenStream) -> TokenStream {
-    let mut rewriter = rewriter::AstRewriter::new();
-    let spec_id = rewriter.generate_spec_id();
-    let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
-    let check = rewriter.generate_spec_loop(spec_id, invariant);
     quote! {
         if false {
             #check
@@ -162,21 +131,19 @@ pub fn thread_ensures(tokens: TokenStream) -> TokenStream {
     }
 }
 
-pub fn attr_test(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    println!("{} \n{} \n\n", attr, tokens);
-    // search for the first ||, else identifier
-    pause();
-    return quote! {
-        #[prusti::attr_test]
-        #tokens
-    }
-}
-
-pub fn attr_test1(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    println!("{} \n{} \n\n", attr, tokens);
-    pause();
-    return quote! {
-        #[prusti::attr1_test]
-        #tokens
+pub fn t_ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut rewriter = rewriter::AstRewriter::new();
+    let spec_id = rewriter.generate_spec_id();
+    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
+    let check = rewriter.generate_spec_thread(spec_id, assertion);
+    let copy: TokenStream = tokens.clone();
+    quote! {
+        {
+           let mut closure = #tokens;
+           if false {
+                #check
+           }
+           closure
+        }
     }
 }
