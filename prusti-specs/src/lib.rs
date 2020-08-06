@@ -121,7 +121,6 @@ pub fn trusted(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 pub fn invariant(tokens: TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
-    println!("{} \n\n", tokens);
     let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
     let check = rewriter.generate_spec_loop(spec_id, invariant);
     quote! {
@@ -135,15 +134,13 @@ pub fn t_ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
     let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
-    let check = rewriter.generate_spec_thread(spec_id, assertion);
-    let copy: TokenStream = tokens.clone();
+    let check = rewriter.generate_spec_thread(spec_id, assertion, tokens.clone());
     quote! {
         {
-           let mut closure = #tokens;
-           if false {
+            if false {
                 #check
-           }
-           closure
+            }
+            #tokens
         }
     }
 }

@@ -21,7 +21,6 @@ impl std::fmt::Display for SpecItemType {
             SpecItemType::Precondition => write!(f, "pre"),
             SpecItemType::Postcondition => write!(f, "post"),
         }
-
     }
 }
 
@@ -150,19 +149,34 @@ impl AstRewriter {
         &mut self,
         spec_id: untyped::SpecificationId,
         assertion: untyped::Assertion,
+        tokens: TokenStream,
     ) -> TokenStream {
+        let item: syn::ExprClosure = match syn::parse2(tokens.clone()) {
+            Ok(data) => data,
+            Err(err) => return err.to_compile_error(),
+        };
+        let rtype = match match item.output {
+            syn::ReturnType::Type(_0, _1) => Ok(*_1),
+            syn::ReturnType::Default => Err(syn::Error::new(
+                    item.span(),
+                    "currently the return type of closures must be specified".to_string(),
+                ))
+        } {
+            Ok(data) => data,
+            Err(err) => return err.to_compile_error(),
+        };
         let mut statements = TokenStream::new();
         assertion.encode_type_check(&mut statements);
         let spec_id_str = spec_id.to_string();
         let assertion_json = crate::specifications::json::to_json_string(&assertion);
         quote! {
-            let result = closure();
-            #[prusti::spec_only]
-            #[prusti::spec_id = #spec_id_str]
-            #[prusti::assertion = #assertion_json]
-            let _prusti_thread_postcondition =
-            {
-                #statements
+            let _prusti_closure_type = |result: #rtype| {
+                #[prusti::spec_only]
+                #[prusti::spec_id = #spec_id_str]
+                #[prusti::assertion = #assertion_json]
+                let _prusti_thread_postcondition = {
+                        #statements
+                };
             };
         }
     }

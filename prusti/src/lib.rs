@@ -59,7 +59,7 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
                 None,
             );
         }
-        println!("I got here");
+        // println!("I got here");
         Compilation::Continue
     }
     fn after_analysis<'tcx>(
@@ -94,17 +94,17 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
                 // determinstic enough to be used in tests.
                 values.sort_by_key(|v| (v.len(), v.to_string()));
                 for value in values {
-                    println!("++++++++++++++++");
-                    println!("{}", value);
+                    // println!("++++++++++++++++");
+                    // println!("{}", value);
                 }
-                println!("------------------");
+                // println!("------------------");
                 let mut keys: Vec<_> = type_map
                     .keys()
                     .map(|id| format!("{:?}", id))
                     .collect();
                 for key in keys {
-                    println!("++++++++++++++++");
-                    println!("{}", key);
+                    // println!("++++++++++++++++");
+                    // println!("{}", key);
                 }
             }
             if !self.flags.skip_verify {
