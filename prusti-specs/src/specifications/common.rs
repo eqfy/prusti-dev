@@ -25,7 +25,7 @@ pub enum SpecType {
 /// A conversion from string into specification type error.
 pub enum TryFromStringError {
     /// Reported when the string being converted is not one of the
-    /// following: `requires`, `ensures`, `invariant`.
+    /// following: `requires`, `ensures`, `invariant`, `t_ensures`
     UnknownSpecificationType,
 }
 

@@ -92,18 +92,21 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
                 // We sort in this strange way so that the output is
                 // determinstic enough to be used in tests.
                 values.sort_by_key(|v| (v.len(), v.to_string()));
+
+                // Below is added code, remove it later
+                println!("Finished spec collection");
                 for value in values {
-                    // println!("++++++++++++++++");
-                    // println!("{}", value);
+                    println!("++++++++++++++++");
+                    println!("{}", value);
                 }
-                // println!("------------------");
+                println!("------------------");
                 let mut keys: Vec<_> = type_map
                     .keys()
                     .map(|id| format!("{:?}", id))
                     .collect();
                 for key in keys {
-                    // println!("++++++++++++++++");
-                    // println!("{}", key);
+                    println!("++++++++++++++++");
+                    println!("{}", key);
                 }
             }
             if !self.flags.skip_verify {

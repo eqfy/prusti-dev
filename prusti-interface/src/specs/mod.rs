@@ -40,6 +40,20 @@ impl<'tcx> SpecCollector<'tcx> {
         self.spec_items
             .into_iter()
             .map(|spec_item| {
+                match spec_item.spec_type {
+                    SpecType::Precondition => {
+                        println!("pre {:?}", spec_item.spec_id)
+                    }
+                    SpecType::Postcondition => {
+                        println!("post {:?}", spec_item.spec_id)
+                    }
+                    SpecType::Invariant => {
+                        println!("inv {:?}", spec_item.spec_id)
+                    }
+                    SpecType::ThreadPostcondition => {
+                        println!("tpost {:?}", spec_item.spec_id)
+                    }
+                }
                 let assertion = typed::SpecificationMapElement::Assertion(reconstruct_typed_assertion(
                     spec_item.specification,
                     &typed_expressions,
@@ -181,15 +195,14 @@ impl<'tcx> intravisit::Visitor<'tcx> for SpecCollector<'tcx> {
         span: Span,
         id: rustc_hir::hir_id::HirId,
     ) {
-        // println!("{:?}", self.current_spec_item);
+        // println!("Visit_fn {:?}", self.current_spec_item);
         if self.current_spec_item.is_some() {
-            // println!("{:?}", read_attr("spec_id", fn_kind.attrs()));
-            // println!("aaaaaaaaaaaaaa");
+            println!("In visit_fn spec_id {:?}", read_attr("spec_id", fn_kind.attrs()));
             if read_attr("spec_id", fn_kind.attrs()).is_none() {
                 // expr_id looks like UUID_101
                 let expr_id = read_attr("expr_id", fn_kind.attrs()).unwrap();
                 let local_id = self.tcx.hir().local_def_id(id);
-                println!("{}           {:?}", expr_id, local_id);
+                println!("Check expr_id and local_id: {}           {:?}", expr_id, local_id);
                 self.typed_expressions.insert(expr_id, local_id);
             }
         }
