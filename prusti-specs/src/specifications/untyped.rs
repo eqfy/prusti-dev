@@ -17,6 +17,8 @@ pub type SpecificationSet = common::SpecificationSet<ExpressionId, syn::Expr, Ar
 pub type LoopSpecification = common::LoopSpecification<ExpressionId, syn::Expr, Arg>;
 /// A set of untyped specifications associated with a procedure.
 pub type ProcedureSpecification = common::ProcedureSpecification<ExpressionId, syn::Expr, Arg>;
+/// A set of untyped specifications associated with a procedure.
+pub type ThreadSpecification = common::ThreadSpecification<ExpressionId, syn::Expr, Arg>;
 /// A map of untyped specifications for a specific crate.
 pub type SpecificationMap = HashMap<common::SpecificationId, SpecificationSet>;
 /// An assertion that has no types associated with it.

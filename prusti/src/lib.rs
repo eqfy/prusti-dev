@@ -59,7 +59,6 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
                 None,
             );
         }
-        // println!("I got here");
         Compilation::Continue
     }
     fn after_analysis<'tcx>(

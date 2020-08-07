@@ -17,6 +17,8 @@ pub enum SpecType {
     Postcondition,
     /// Loop invariant or struct invariant
     Invariant,
+    /// Postcondition of a thread.
+    ThreadPostcondition,
 }
 
 #[derive(Debug)]
@@ -35,6 +37,7 @@ impl<'a> TryFrom<&'a str> for SpecType {
             "requires" => Ok(SpecType::Precondition),
             "ensures" => Ok(SpecType::Postcondition),
             "invariant" => Ok(SpecType::Invariant),
+            "t_ensures" => Ok(SpecType::ThreadPostcondition),
             _ => Err(TryFromStringError::UnknownSpecificationType),
         }
     }
@@ -246,6 +249,25 @@ impl<EID, ET, AT> LoopSpecification<EID, ET, AT> {
     }
 }
 
+/// Specification of a thread.
+#[derive(Debug, Clone)]
+pub struct ThreadSpecification<EID, ET, AT> {
+    /// Thread postcondition.
+    pub tposts: Vec<Assertion<EID, ET, AT>>,
+}
+
+impl<EID, ET, AT> ThreadSpecification<EID, ET, AT> {
+    pub fn new(tposts: Vec<Assertion<EID, ET, AT>>) -> Self {
+        Self { tposts }
+    }
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
+    }
+    pub fn is_empty(&self) -> bool {
+        self.tposts.is_empty()
+    }
+}
+
 /// Specification of a procedure.
 #[derive(Debug, Clone)]
 pub struct ProcedureSpecification<EID, ET, AT> {
@@ -282,6 +304,8 @@ pub enum SpecificationSet<EID, ET, AT> {
     Loop(LoopSpecification<EID, ET, AT>),
     /// Struct invariant.
     Struct(Vec<Specification<EID, ET, AT>>),
+    /// Thread postcondition
+    Thread(ThreadSpecification<EID, ET, AT>),
 }
 
 impl<EID, ET, AT> SpecificationSet<EID, ET, AT> {
@@ -290,6 +314,7 @@ impl<EID, ET, AT> SpecificationSet<EID, ET, AT> {
             SpecificationSet::Procedure(spec) => spec.is_empty(),
             SpecificationSet::Loop(ref invs) => invs.is_empty(),
             SpecificationSet::Struct(ref invs) => invs.is_empty(),
+            SpecificationSet::Thread(spec) => spec.is_empty(),
         }
     }
 }
