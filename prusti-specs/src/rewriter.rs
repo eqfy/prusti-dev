@@ -39,8 +39,9 @@ impl AstRewriter {
         &mut self,
         spec_id: untyped::SpecificationId,
         tokens: TokenStream,
+        fn_tokens: TokenStream
     ) -> syn::Result<untyped::Assertion> {
-        untyped::Assertion::parse(tokens, spec_id, &mut self.expr_id_generator)
+        untyped::Assertion::parse(tokens, spec_id, &mut self.expr_id_generator, fn_tokens)
     }
     /// Parse a pledge.
     pub fn parse_pledge(
@@ -51,6 +52,15 @@ impl AstRewriter {
     ) -> syn::Result<untyped::Pledge> {
         untyped::Pledge::parse(tokens, spec_id_lhs, spec_id_rhs, &mut self.expr_id_generator)
     }
+    //todo remove this
+    // /// Parse an on_join
+    // pub fn parse_on_join(
+    //     &mut self,
+    //     spec_id: untyped::SpecificationId,
+    //     tokens: TokenStream,
+    // ) -> syn::Result<untyped::OnJoin> {
+    //     untyped::OnJoin::parse(tokens, spec_id, &mut self.expr_id_generator)
+    // }
     /// Check whether function `item` contains a parameter called `keyword`. If
     /// yes, return its span.
     fn check_contains_keyword_in_params(&self, item: &syn::ItemFn, keyword: &str) -> Option<Span> {
@@ -134,8 +144,10 @@ impl AstRewriter {
         assertion.encode_type_check(&mut statements);
         let spec_id_str = spec_id.to_string();
         let assertion_json = crate::specifications::json::to_json_string(&assertion);
+        let spec_type = "invariant".to_string();
         quote! {
             #[prusti::spec_only]
+            #[prusti::spec_type = #spec_type]
             #[prusti::spec_id = #spec_id_str]
             #[prusti::assertion = #assertion_json]
             let _prusti_loop_invariant =
@@ -169,9 +181,11 @@ impl AstRewriter {
         assertion.encode_type_check(&mut statements);
         let spec_id_str = spec_id.to_string();
         let assertion_json = crate::specifications::json::to_json_string(&assertion);
+        let spec_type = "t_ensures".to_string();
         quote! {
-            let _prusti_closure_type = |result: #rtype| {
+            |result: #rtype| {
                 #[prusti::spec_only]
+                #[prusti::spec_type = #spec_type]
                 #[prusti::spec_id = #spec_id_str]
                 #[prusti::assertion = #assertion_json]
                 let _prusti_thread_postcondition = {

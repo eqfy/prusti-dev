@@ -367,6 +367,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecEncoder<'p, 'v, 'tcx> {
                     .collect(),
                 self.encode_assertion(body),
             ),
+            // FIXME on_join
+            box typed::AssertionKind::OnJoin(ref expr, ref assertion) => self.encode_assertion(assertion)
         }
     }
 

@@ -17,6 +17,7 @@ pub enum AssertionKind {
     And(Vec<Assertion>),
     Implies(Assertion, Assertion),
     ForAll(ForAllVars, Assertion, TriggerSet),
+    OnJoin(ForAllVars, Assertion)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -101,6 +102,10 @@ impl ToStructure<AssertionKind> for untyped::AssertionKind {
                 vars.to_structure(),
                 body.to_structure(),
                 triggers.to_structure(),
+            ),
+            OnJoin(var, assertion) => AssertionKind::OnJoin(
+                var.to_structure(),
+                assertion.to_structure()
             ),
             x => {
                 unimplemented!("{:?}", x);

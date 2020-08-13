@@ -12,6 +12,7 @@ pub use common::{ExpressionId, SpecType, SpecificationId};
 pub enum SpecificationMapElement<'tcx> {
     Assertion(Assertion<'tcx>),
     Loop(LoopSpecification<'tcx>),
+    Thread(ThreadSpecification<'tcx>),
 }
 
 impl<'tcx> SpecificationMapElement<'tcx> {
@@ -49,6 +50,8 @@ pub type ForAllVars<'tcx> = common::ForAllVars<ExpressionId, (mir::Local, ty::Ty
 pub type Trigger = common::Trigger<ExpressionId, LocalDefId>;
 /// A pledge in the postcondition.
 pub type Pledge<'tcx> = common::Pledge<ExpressionId, LocalDefId, (mir::Local, ty::Ty<'tcx>)>;
+/// A on_join in the postcondition.
+pub type OnJoin<'tcx> = common::OnJoin<ExpressionId, LocalDefId, (mir::Local, ty::Ty<'tcx>)>;
 
 pub trait Spanned<'tcx> {
     fn get_spans(&self, tcx: TyCtxt<'tcx>) -> Vec<Span>;
@@ -82,6 +85,10 @@ impl<'tcx> Spanned<'tcx> for Assertion<'tcx> {
             AssertionKind::TypeCond(ref _vars, ref body) => {
                 // FIXME: include the conditions
                 body.get_spans(tcx)
+            }
+            AssertionKind::OnJoin(ref _var, ref assertion ) => {
+                // FIXME
+                assertion.get_spans(tcx)
             }
         }
     }
@@ -171,6 +178,10 @@ impl<'tcx> StructuralToTyped<'tcx, AssertionKind<'tcx>> for json::AssertionKind 
                 vars.to_typed(typed_expressions, tcx),
                 triggers.to_typed(typed_expressions, tcx),
                 body.to_typed(typed_expressions, tcx),
+            ),
+            OnJoin(var, assertion) => AssertionKind::OnJoin(
+                var.to_typed(typed_expressions, tcx),
+                assertion.to_typed(typed_expressions, tcx)
             )
         }
     }

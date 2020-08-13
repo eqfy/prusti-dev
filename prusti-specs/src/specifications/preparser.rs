@@ -2,19 +2,23 @@
 /// parses the resulting Rust expressions, and then assembles the composite
 /// Prusti assertion.
 
-use proc_macro2::{Delimiter, Group, Spacing, Span, TokenStream, TokenTree};
+use proc_macro2::{Delimiter, Group, Spacing, Span, TokenStream, TokenTree, Ident};
 use std::collections::VecDeque;
 use std::mem;
+use std::rc::Rc;
 use syn::parse::{ParseStream, Parse};
-use syn::{self, Token, Error};
+use syn::{self, Token, Error, Type, ReturnType};
 
 use super::common;
 use crate::specifications::common::{ForAllVars, TriggerSet, Trigger};
 use syn::spanned::Spanned;
+use quote::ToTokens;
+use quote::quote;
 
 pub type AssertionWithoutId = common::Assertion<(), syn::Expr, Arg>;
 pub type PledgeWithoutId = common::Pledge<(), syn::Expr, Arg>;
 pub type ExpressionWithoutId = common::Expression<(), syn::Expr>;
+pub type OnJoinWithoutId = common::OnJoin<(), syn::Expr, Arg>;
 
 /// A helper to operate the stream of tokens.
 #[derive(Debug, Clone)]
@@ -288,10 +292,12 @@ pub struct Parser {
     /// containing a lhs. This is important so that the parser stops at the
     /// comma in between lhs and rhs.
     parsing_pledge_with_lhs: bool,
+    // todo add description, replace with a rc
+    function_token: Rc<TokenStream>,
 }
 
 impl Parser {
-    pub fn from_token_stream(tokens: TokenStream) -> Self {
+    pub fn from_token_stream(tokens: TokenStream, fn_token: Rc<TokenStream>) -> Self {
         let input = ParserStream::from_token_stream(tokens);
         Self {
             input,
@@ -301,9 +307,10 @@ impl Parser {
             expected_operator: false,
             expected_only_operator: false,
             parsing_pledge_with_lhs: false,
+            function_token: fn_token,
         }
     }
-    fn from_parser_stream(input: ParserStream) -> Self {
+    fn from_parser_stream(input: ParserStream, fn_token: Rc<TokenStream>) -> Self {
         Self {
             input,
             conjuncts: Vec::new(),
@@ -312,6 +319,7 @@ impl Parser {
             expected_operator: false,
             expected_only_operator: false,
             parsing_pledge_with_lhs: false,
+            function_token: fn_token,
         }
     }
     fn resolve_and(&mut self) -> syn::Result<()>{
@@ -368,7 +376,8 @@ impl Parser {
         // recursively parse the rhs assertion; note that this automatically handles the
         // operator precedence: implication will be then weaker than conjunction
         let mut parser = Parser::from_parser_stream(
-            mem::replace(&mut self.input, ParserStream::empty())
+            mem::replace(&mut self.input, ParserStream::empty()),
+            self.function_token.clone()
         );
 
         let lhs = self.conjuncts_to_assertion();
@@ -384,6 +393,93 @@ impl Parser {
         return Ok(AssertionWithoutId{
             kind: Box::new(common::AssertionKind::Implies(lhs.unwrap(), rhs.unwrap()))
         });
+    }
+    fn extract_join_handle_type(&mut self, token_stream : TokenStream) -> syn::Result<Type>{
+        let item: syn::ItemFn = match syn::parse2((*self.function_token).clone()) {
+            Ok(data) => data,
+            Err(err) => return Err(err)
+        };
+        return if token_stream.to_string() == "result" {
+            let output = item.sig.output;
+            match output {
+                ReturnType::Default => { Err(self.error_no_thread_handler()) },
+                ReturnType::Type(_a, output_type) => Ok(*output_type),
+            }
+        } else {
+            let input = item.sig.inputs;
+            for fn_arg in input {
+                match fn_arg {
+                    syn::FnArg::Typed(pat_type) => {
+                        // let mut a = TokenStream::new();
+                        // pat_type.pat.to_tokens(&mut a);
+                        if pat_type.pat.to_token_stream().to_string() == token_stream.to_string() {
+                            return Ok(*pat_type.ty);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            Err(self.error_no_thread_handler())
+        }
+    }
+    fn resolve_on_join(&mut self) -> syn::Result<()>{
+        // handles the case when there is a lhs to forall
+        if self.expected_operator {
+            return Err(self.error_expected_assertion());
+        }
+
+        // check whether there is a parenthesized block after on_join
+        if let Some(group) = self.input.check_and_consume_parenthesized_block() {
+
+            let mut stream = ParserStream::from_token_stream(group.stream());
+
+            // parse vars
+            let token_stream = stream.create_stream_until(",");
+            if token_stream.is_empty() {
+                return Err(self.error_no_thread_handler());
+            }
+            // let handle;
+            let join_handle_type: Type = self.extract_join_handle_type(token_stream.clone()).unwrap();
+            let ident = Ident::new("result", Span::call_site());
+
+            let b = quote! {
+                #ident : #join_handle_type
+            };
+            println!("\n{}\n\n", b);
+            // println!("{} : {:?} \n\n", Ident::new("result", Span::call_site()).to_string(), join_handle_type.unwrap());
+            let mut vars = vec![];
+            vars.push(Arg {
+                typ: join_handle_type,
+                name: ident
+            });
+            if !stream.check_and_consume_operator(",") {
+                return  Err(self.error_expected_comma());
+            }
+            let token_stream = stream.create_stream();
+            println!("{}", token_stream);
+            let mut parser = Parser::from_token_stream(token_stream, self.function_token.clone());
+            let body = parser.extract_assertion()?;
+            // // TODO Might be wrong
+            let conjunct = AssertionWithoutId {
+                kind: Box::new(common::AssertionKind::OnJoin(
+                    ForAllVars {
+                        spec_id: common::SpecificationId::dummy(),
+                        id: (),
+                        vars
+                    },
+                    body
+                ))
+            };
+
+            self.conjuncts.push(conjunct);
+            self.previous_expression_resolved = true;
+            self.expected_only_operator = true;
+            self.expected_operator = true;
+            return Ok(());
+        } else {
+            return Err(self.error_expected_parenthesis());
+        }
     }
     fn resolve_forall(&mut self) -> syn::Result<()> {
         if self.expected_operator {
@@ -418,7 +514,7 @@ impl Parser {
 
             // parse body
             let token_stream = stream.create_stream_until(",");
-            let mut parser = Parser::from_token_stream(token_stream);
+            let mut parser = Parser::from_token_stream(token_stream, self.function_token.clone());
             let body = parser.extract_assertion()?;
 
             // create triggers in case they are not present
@@ -504,7 +600,7 @@ impl Parser {
                 return Err(self.error_expected_operator());
             }
 
-            let mut parser = Parser::from_token_stream(group.stream());
+            let mut parser = Parser::from_token_stream(group.stream(), self.function_token.clone());
             let conjunct = parser.extract_assertion();
 
             if let Err(err) = conjunct {
@@ -555,6 +651,11 @@ impl Parser {
             else if self.input.check_and_consume_keyword("forall") {
                 if let Err(err) = self.resolve_forall() {
                     return Err(err);
+                }
+            }
+            else if self.input.check_and_consume_keyword("on_join") {
+                if let Err(err) = self.resolve_on_join() {
+                    return  Err(err);
                 }
             }
             else if let Some(group) = self.input.check_and_consume_parenthesized_block() {
@@ -631,6 +732,30 @@ impl Parser {
             rhs: assertion
         })
     }
+    // pub fn extract_on_join(&mut self) -> syn::Result<OnJoinWithoutId> {
+    //     let mut reference = None;
+    //     if self.input.contains_operator(",") {
+    //         let ref_stream = self.input.create_stream_until(",");
+    //         let parsed_expr = self.parse_rust_expression(ref_stream)?;
+    //
+    //         let expr = ExpressionWithoutId {
+    //             spec_id: common::SpecificationId::dummy(),
+    //             id: (),
+    //             expr: parsed_expr,
+    //         };
+    //         reference = Some(expr);
+    //         self.input.check_and_consume_operator(",");
+    //     } else {
+    //         return Err(self.error_expected_comma());
+    //     }
+    //
+    //     let assertion = self.extract_assertion()?;
+    //
+    //     Ok(OnJoinWithoutId {
+    //         reference,
+    //         body: assertion,
+    //     })
+    // }
     /// Convert all conjuncts into And assertion.
     fn conjuncts_to_assertion(&mut self) -> syn::Result<AssertionWithoutId> {
         let mut conjuncts = mem::replace(&mut self.conjuncts, Vec::new());
@@ -698,5 +823,8 @@ impl Parser {
     }
     fn error_no_quantifier_arguments(&self) -> syn::Error {
         syn::Error::new(self.input.span, "a quantifier must have at least one argument")
+    }
+    fn error_no_thread_handler(&self) -> syn::Error {
+        syn::Error::new(self.input.span, "an on_join must have a thread handler")
     }
 }

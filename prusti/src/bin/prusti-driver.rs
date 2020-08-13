@@ -49,7 +49,7 @@ fn main() {
         } else if arg == "-Zprint-typeckd-specs" {
             flags.print_typeckd_specs = true;
         } else if arg == "-Zprint-collected-verification-items" {
-            flags.print_collected_verfication_items = true;
+            flags.print_collected_verifications_items = true;
         } else if arg == "-Zskip-verify" {
             flags.skip_verify = true;
         } else if arg == "-Zhide-uuids" {

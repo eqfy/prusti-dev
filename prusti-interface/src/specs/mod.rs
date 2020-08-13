@@ -6,7 +6,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_span::Span;
 use rustc_hir::def_id::LocalDefId;
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryInto, TryFrom};
 
 pub mod typed;
 
@@ -40,20 +40,6 @@ impl<'tcx> SpecCollector<'tcx> {
         self.spec_items
             .into_iter()
             .map(|spec_item| {
-                match spec_item.spec_type {
-                    SpecType::Precondition => {
-                        println!("pre {:?}", spec_item.spec_id)
-                    }
-                    SpecType::Postcondition => {
-                        println!("post {:?}", spec_item.spec_id)
-                    }
-                    SpecType::Invariant => {
-                        println!("inv {:?}", spec_item.spec_id)
-                    }
-                    SpecType::ThreadPostcondition => {
-                        println!("tpost {:?}", spec_item.spec_id)
-                    }
-                }
                 let assertion = typed::SpecificationMapElement::Assertion(reconstruct_typed_assertion(
                     spec_item.specification,
                     &typed_expressions,
@@ -208,15 +194,26 @@ impl<'tcx> intravisit::Visitor<'tcx> for SpecCollector<'tcx> {
         }
         intravisit::walk_fn(self, fn_kind, fn_decl, body_id, span, id);
     }
+    // Collects spec information for loop invariants and thread postconditions
     fn visit_local(&mut self, local: &'tcx rustc_hir::Local<'tcx>) {
         let mut clean_spec_item = false;
         if has_spec_only_attr(&local.attrs) {
+            let spec_type  = SpecType::try_from(
+                read_attr("spec_type", &local.attrs)
+                .expect("missing local_type for local position (either invariant/thread_post)")
+                .as_str()
+            ).unwrap();
+            match spec_type {
+                SpecType::Precondition => unreachable!(), 
+                SpecType::Postcondition => unreachable!(),
+                _ => ()
+            }
             let spec_item = SpecItem {
                 spec_id: read_attr("spec_id", &local.attrs)
-                    .expect("missing spec_id on invariant")
+                    .expect("missing spec_id on invariant/thread_post")
                     .try_into()
                     .unwrap(),
-                spec_type: SpecType::Invariant,
+                spec_type,
                 specification: deserialize_spec_from_attrs(&local.attrs),
             };
             assert!(self.current_spec_item.is_none());

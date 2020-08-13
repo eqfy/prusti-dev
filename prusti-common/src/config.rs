@@ -18,7 +18,7 @@ pub struct ConfigFlags {
     /// Should Prusti print the type-checked specifications.
     pub print_typeckd_specs: bool,
     /// Should Prusti print the items collected for verification.
-    pub print_collected_verfication_items: bool,
+    pub print_collected_verifications_items: bool,
     /// Should Prusti skip the verification part.
     pub skip_verify: bool,
     /// Should Prusti hide the UUIDs of expressions and specifications.

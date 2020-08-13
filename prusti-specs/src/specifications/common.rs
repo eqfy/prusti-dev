@@ -190,6 +190,19 @@ pub struct ForAllVars<EID, AT> {
     pub vars: Vec<AT>,
 }
 
+
+/// TODO implement this
+#[derive(Debug, Clone)]
+/// A variable used in the onjoin
+pub struct OnJoinVar<EID, AT> {
+    /// Identifier of the specification to which this variable belongs.
+    pub spec_id: SpecificationId,
+    /// Unique id for this variable
+    pub id: EID,
+    /// Actual expression.
+    pub var: AT,
+}
+
 #[derive(Debug, Clone)]
 /// An assertion kind used in the specification.
 pub enum AssertionKind<EID, ET, AT> {
@@ -207,6 +220,12 @@ pub enum AssertionKind<EID, ET, AT> {
         TriggerSet<EID, ET>,
         Assertion<EID, ET, AT>,
     ),
+    /// Thread join handler (on_join(var, body))
+    OnJoin(
+        /// Uses forall vars for now
+        ForAllVars<EID, AT>,
+        Assertion<EID, ET, AT>,
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -219,6 +238,15 @@ pub struct Pledge<EID, ET, AT> {
     pub lhs: Option<Assertion<EID, ET, AT>>,
     /// The body rhs.
     pub rhs: Assertion<EID, ET, AT>,
+}
+
+#[derive(Debug, Clone)]
+/// OnJoin `on_join(ref, expr)
+pub struct OnJoin<EID, ET, AT> {
+    /// The ref.
+    pub reference: Option<Expression<EID, ET>>,
+    /// The body expr.
+    pub body: Assertion<EID, ET, AT>,
 }
 
 #[derive(Debug, Clone)]

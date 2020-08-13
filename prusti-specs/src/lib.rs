@@ -21,11 +21,11 @@ macro_rules! handle_result {
 }
 
 pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let item: syn::ItemFn = handle_result!(syn::parse2(tokens));
+    let item: syn::ItemFn = handle_result!(syn::parse2(tokens.clone()));
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
-    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
+    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr, tokens));
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Precondition, spec_id, assertion, &item));
     quote! {
@@ -36,11 +36,11 @@ pub fn requires(attr: TokenStream, tokens: TokenStream) -> TokenStream {
 }
 
 pub fn ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-    let item: syn::ItemFn = handle_result!(syn::parse2(tokens));
+    let item: syn::ItemFn = handle_result!(syn::parse2(tokens.clone()));
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
     let spec_id_str = spec_id.to_string();
-    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
+    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr, tokens));
     let spec_item =
         handle_result!(rewriter.generate_spec_item_fn(rewriter::SpecItemType::Postcondition, spec_id, assertion, &item));
     quote! {
@@ -104,6 +104,13 @@ pub fn after_expiry_if(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     }
 }
 
+// pub fn on_join(attr: TokenStream, tokens: TokenStream) -> TokenStream {
+//     let item: syn::ItemFn = handle_result!(syn::parse2(tokens));
+//     let mut rewriter = rewriter::AstRewriter::new();
+//     let spec_id = rewriter.generate_spec_id();
+//     let spec_id_str = format!(":{}", spec_id);
+//     let on_join
+// }
 pub fn pure(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     quote! {
         #[prusti::pure]
@@ -121,7 +128,7 @@ pub fn trusted(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
 pub fn invariant(tokens: TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
-    let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens));
+    let invariant = handle_result!(rewriter.parse_assertion(spec_id, tokens, TokenStream::new()));
     let check = rewriter.generate_spec_loop(spec_id, invariant);
     quote! {
         if false {
@@ -133,7 +140,7 @@ pub fn invariant(tokens: TokenStream) -> TokenStream {
 pub fn t_ensures(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     let mut rewriter = rewriter::AstRewriter::new();
     let spec_id = rewriter.generate_spec_id();
-    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr));
+    let assertion = handle_result!(rewriter.parse_assertion(spec_id, attr, TokenStream::new()));
     let check = rewriter.generate_spec_thread(spec_id, assertion, tokens.clone());
     quote! {
         {

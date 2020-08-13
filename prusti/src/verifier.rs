@@ -34,7 +34,7 @@ pub fn verify<'tcx>(flags: ConfigFlags, tcx: TyCtxt<'tcx>, spec: typed::Specific
             verification_task.procedures.len()
         ));
 
-        if flags.print_collected_verfication_items {
+        if flags.print_collected_verifications_items {
             println!("Collected verification items {}:", verification_task.procedures.len());
             for procedure in &verification_task.procedures {
                 println!("procedure: {} at {:?}", env.get_item_def_path(*procedure), env.get_item_span(*procedure));

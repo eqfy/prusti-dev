@@ -31,14 +31,17 @@ pub type Expression = common::Expression<ExpressionId, syn::Expr>;
 pub type TriggerSet = common::TriggerSet<ExpressionId, syn::Expr>;
 /// A pledge that has not types associated with it.
 pub type Pledge = common::Pledge<ExpressionId, syn::Expr, Arg>;
+/// An on_join that has no types associated with it
+pub type OnJoin = common::OnJoin<ExpressionId, syn::Expr, Arg>;
 
 impl Assertion {
     pub(crate) fn parse(
         tokens: TokenStream,
         spec_id: SpecificationId,
         id_generator: &mut ExpressionIdGenerator,
+        fn_tokens: TokenStream
     ) -> syn::Result<Self> {
-        let mut parser = Parser::from_token_stream(tokens);
+        let mut parser = Parser::from_token_stream(tokens, std::rc::Rc::new(fn_tokens));
         let assertion = parser.extract_assertion()?;
         Ok(assertion.assign_id(spec_id, id_generator))
     }
@@ -72,7 +75,7 @@ impl Pledge {
         spec_id_rhs: SpecificationId,
         id_generator: &mut ExpressionIdGenerator,
     ) -> syn::Result<Self> {
-        let mut parser = Parser::from_token_stream(tokens);
+        let mut parser = Parser::from_token_stream(tokens, std::rc::Rc::new(TokenStream::new()));
         let pledge = if let Some(spec_id_lhs) = spec_id_lhs {
             let pledge = parser.extract_pledge()?;
             Pledge {
@@ -94,6 +97,23 @@ impl Pledge {
     }
 }
 
+// impl OnJoin {
+//     pub(crate) fn parse (
+//         tokens: TokenStream,
+//         spec_id: SpecificationId,
+//         id_generator: &mut ExpressionIdGenerator,
+//     ) -> syn::Result<Self> {
+//         let mut parser = Parser::from_token_stream(tokens);
+//         let on_join = {
+//             let on_join = parser.extract_on_join()?;
+//             OnJoin {
+//                 reference: on_join.reference.assign_id(spec_id, id_generator),
+//                 body: on_join.body.assign_id(spec_id, id_generator),
+//             }
+//         };
+//         Ok(on_join)
+//     }
+// }
 pub(crate) trait AssignExpressionId<Target> {
     fn assign_id(
         self,
@@ -200,6 +220,10 @@ impl AssignExpressionId<AssertionKind> for common::AssertionKind<(), syn::Expr, 
                 triggers.assign_id(spec_id, id_generator),
                 body.assign_id(spec_id, id_generator)
             ),
+            OnJoin(var, assertion) => OnJoin(
+                var.assign_id(spec_id, id_generator),
+                assertion.assign_id(spec_id, id_generator)
+            ),
             x => unimplemented!("{:?}", x),
         }
     }
@@ -305,6 +329,25 @@ impl EncodeTypeCheck for Assertion {
                         #nested_assertion
                     };
                 };
+                tokens.extend(typeck_call);
+            }
+            AssertionKind::OnJoin(var, assertion) => {
+                let vec_of_vars = &var.vars;
+                let span = Span::call_site();
+                let identifier = format!("{}_{}", var.spec_id, var.id);
+
+                let mut nested_assertion = TokenStream::new();
+                assertion.encode_type_check(&mut nested_assertion);
+
+                let typeck_call = quote_spanned! { span =>
+                    #[prusti::spec_only]
+                    #[prusti::expr_id = #identifier]
+                    |#(#vec_of_vars),*| {
+                        let result = result.join().unwrap();
+                        #nested_assertion
+                    };
+                };
+                println!("{}", typeck_call);
                 tokens.extend(typeck_call);
             }
             x => {

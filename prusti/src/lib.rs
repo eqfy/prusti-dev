@@ -97,7 +97,7 @@ impl rustc_driver::Callbacks for PrustiCompilerCalls {
                 println!("Finished spec collection");
                 for value in values {
                     println!("++++++++++++++++");
-                    println!("{}", value);
+                    println!("{}", value); // Given
                 }
                 println!("------------------");
                 let mut keys: Vec<_> = type_map
