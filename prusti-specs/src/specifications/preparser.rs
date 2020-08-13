@@ -13,7 +13,6 @@ use super::common;
 use crate::specifications::common::{ForAllVars, TriggerSet, Trigger};
 use syn::spanned::Spanned;
 use quote::ToTokens;
-use quote::quote;
 
 pub type AssertionWithoutId = common::Assertion<(), syn::Expr, Arg>;
 pub type PledgeWithoutId = common::Pledge<(), syn::Expr, Arg>;
@@ -394,35 +393,6 @@ impl Parser {
             kind: Box::new(common::AssertionKind::Implies(lhs.unwrap(), rhs.unwrap()))
         });
     }
-    fn extract_join_handle_type(&mut self, token_stream : TokenStream) -> syn::Result<Type>{
-        let item: syn::ItemFn = match syn::parse2((*self.function_token).clone()) {
-            Ok(data) => data,
-            Err(err) => return Err(err)
-        };
-        return if token_stream.to_string() == "result" {
-            let output = item.sig.output;
-            match output {
-                ReturnType::Default => { Err(self.error_no_thread_handler()) },
-                ReturnType::Type(_a, output_type) => Ok(*output_type),
-            }
-        } else {
-            let input = item.sig.inputs;
-            for fn_arg in input {
-                match fn_arg {
-                    syn::FnArg::Typed(pat_type) => {
-                        // let mut a = TokenStream::new();
-                        // pat_type.pat.to_tokens(&mut a);
-                        if pat_type.pat.to_token_stream().to_string() == token_stream.to_string() {
-                            return Ok(*pat_type.ty);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            Err(self.error_no_thread_handler())
-        }
-    }
     fn resolve_on_join(&mut self) -> syn::Result<()>{
         // handles the case when there is a lhs to forall
         if self.expected_operator {
@@ -434,20 +404,15 @@ impl Parser {
 
             let mut stream = ParserStream::from_token_stream(group.stream());
 
-            // parse vars
+            // parse var
             let token_stream = stream.create_stream_until(",");
             if token_stream.is_empty() {
-                return Err(self.error_no_thread_handler());
+                return Err(self.error_expected_thread_join_handle());
             }
-            // let handle;
             let join_handle_type: Type = self.extract_join_handle_type(token_stream.clone()).unwrap();
             let ident = Ident::new("result", Span::call_site());
 
-            let b = quote! {
-                #ident : #join_handle_type
-            };
-            println!("\n{}\n\n", b);
-            // println!("{} : {:?} \n\n", Ident::new("result", Span::call_site()).to_string(), join_handle_type.unwrap());
+            // TODO we use ForAllVar here, in the future we should switch to a data structure dedicated for on_join
             let mut vars = vec![];
             vars.push(Arg {
                 typ: join_handle_type,
@@ -457,10 +422,8 @@ impl Parser {
                 return  Err(self.error_expected_comma());
             }
             let token_stream = stream.create_stream();
-            println!("{}", token_stream);
             let mut parser = Parser::from_token_stream(token_stream, self.function_token.clone());
             let body = parser.extract_assertion()?;
-            // // TODO Might be wrong
             let conjunct = AssertionWithoutId {
                 kind: Box::new(common::AssertionKind::OnJoin(
                     ForAllVars {
@@ -732,30 +695,33 @@ impl Parser {
             rhs: assertion
         })
     }
-    // pub fn extract_on_join(&mut self) -> syn::Result<OnJoinWithoutId> {
-    //     let mut reference = None;
-    //     if self.input.contains_operator(",") {
-    //         let ref_stream = self.input.create_stream_until(",");
-    //         let parsed_expr = self.parse_rust_expression(ref_stream)?;
-    //
-    //         let expr = ExpressionWithoutId {
-    //             spec_id: common::SpecificationId::dummy(),
-    //             id: (),
-    //             expr: parsed_expr,
-    //         };
-    //         reference = Some(expr);
-    //         self.input.check_and_consume_operator(",");
-    //     } else {
-    //         return Err(self.error_expected_comma());
-    //     }
-    //
-    //     let assertion = self.extract_assertion()?;
-    //
-    //     Ok(OnJoinWithoutId {
-    //         reference,
-    //         body: assertion,
-    //     })
-    // }
+    fn extract_join_handle_type(&mut self, token_stream : TokenStream) -> syn::Result<Type>{
+        let item: syn::ItemFn = match syn::parse2((*self.function_token).clone()) {
+            Ok(data) => data,
+            Err(err) => return Err(err)
+        };
+        return if token_stream.to_string() == "result" {
+            let output = item.sig.output;
+            match output {
+                ReturnType::Default => { Err(self.error_expected_thread_join_handle()) },
+                ReturnType::Type(_a, output_type) => Ok(*output_type),
+            }
+        } else {
+            let input = item.sig.inputs;
+            for fn_arg in input {
+                match fn_arg {
+                    syn::FnArg::Typed(pat_type) => {
+                        if pat_type.pat.to_token_stream().to_string() == token_stream.to_string() {
+                            return Ok(*pat_type.ty);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            Err(self.error_expected_thread_join_handle())
+        }
+    }
     /// Convert all conjuncts into And assertion.
     fn conjuncts_to_assertion(&mut self) -> syn::Result<AssertionWithoutId> {
         let mut conjuncts = mem::replace(&mut self.conjuncts, Vec::new());
@@ -824,7 +790,8 @@ impl Parser {
     fn error_no_quantifier_arguments(&self) -> syn::Error {
         syn::Error::new(self.input.span, "a quantifier must have at least one argument")
     }
-    fn error_no_thread_handler(&self) -> syn::Error {
-        syn::Error::new(self.input.span, "an on_join must have a thread handler")
+    fn error_expected_thread_join_handle(&self) -> syn::Error {
+        syn::Error::new(self.input.span,
+                        "expected only one variable of type JoinHandle<T> defined in the function signature")
     }
 }

@@ -222,7 +222,7 @@ pub enum AssertionKind<EID, ET, AT> {
     ),
     /// Thread join handler (on_join(var, body))
     OnJoin(
-        /// Uses forall vars for now
+        /// TODO Fix this to not use ForAllVars
         ForAllVars<EID, AT>,
         Assertion<EID, ET, AT>,
     )

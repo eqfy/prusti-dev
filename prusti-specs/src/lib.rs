@@ -104,13 +104,6 @@ pub fn after_expiry_if(attr: TokenStream, tokens: TokenStream) -> TokenStream {
     }
 }
 
-// pub fn on_join(attr: TokenStream, tokens: TokenStream) -> TokenStream {
-//     let item: syn::ItemFn = handle_result!(syn::parse2(tokens));
-//     let mut rewriter = rewriter::AstRewriter::new();
-//     let spec_id = rewriter.generate_spec_id();
-//     let spec_id_str = format!(":{}", spec_id);
-//     let on_join
-// }
 pub fn pure(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     quote! {
         #[prusti::pure]

@@ -52,15 +52,6 @@ impl AstRewriter {
     ) -> syn::Result<untyped::Pledge> {
         untyped::Pledge::parse(tokens, spec_id_lhs, spec_id_rhs, &mut self.expr_id_generator)
     }
-    //todo remove this
-    // /// Parse an on_join
-    // pub fn parse_on_join(
-    //     &mut self,
-    //     spec_id: untyped::SpecificationId,
-    //     tokens: TokenStream,
-    // ) -> syn::Result<untyped::OnJoin> {
-    //     untyped::OnJoin::parse(tokens, spec_id, &mut self.expr_id_generator)
-    // }
     /// Check whether function `item` contains a parameter called `keyword`. If
     /// yes, return its span.
     fn check_contains_keyword_in_params(&self, item: &syn::ItemFn, keyword: &str) -> Option<Span> {

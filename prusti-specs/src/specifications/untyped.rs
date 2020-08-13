@@ -97,23 +97,6 @@ impl Pledge {
     }
 }
 
-// impl OnJoin {
-//     pub(crate) fn parse (
-//         tokens: TokenStream,
-//         spec_id: SpecificationId,
-//         id_generator: &mut ExpressionIdGenerator,
-//     ) -> syn::Result<Self> {
-//         let mut parser = Parser::from_token_stream(tokens);
-//         let on_join = {
-//             let on_join = parser.extract_on_join()?;
-//             OnJoin {
-//                 reference: on_join.reference.assign_id(spec_id, id_generator),
-//                 body: on_join.body.assign_id(spec_id, id_generator),
-//             }
-//         };
-//         Ok(on_join)
-//     }
-// }
 pub(crate) trait AssignExpressionId<Target> {
     fn assign_id(
         self,
@@ -347,7 +330,6 @@ impl EncodeTypeCheck for Assertion {
                         #nested_assertion
                     };
                 };
-                println!("{}", typeck_call);
                 tokens.extend(typeck_call);
             }
             x => {
