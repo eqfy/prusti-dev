@@ -132,7 +132,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecEncoder<'p, 'v, 'tcx> {
         assert!(
             match arg_ty.kind {
                 ty::TyKind::Int(..) | ty::TyKind::Uint(..) => true,
-                _ => false,
+                _ => {
+                    println!("Bad forall type {:?}", arg_ty.kind);
+                    false
+                }
             },
             "Quantification is only supported over integer values"
         );
@@ -140,6 +143,17 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecEncoder<'p, 'v, 'tcx> {
         // not match the names generated in other places.)
         let var_name = format!("{:?}", arg);
         vir::LocalVar::new(var_name, vir::Type::Int)
+    }
+
+    fn encode_onjoin_arg(&self, arg: mir::Local, arg_ty: ty::Ty<'tcx>) -> vir::LocalVar {
+        trace!("encode_onjoin_arg: {:?} {:?}", arg, arg_ty);
+        // assert!(
+            // match arg_ty.kind {
+            //     ty::TyKind
+            // }
+        // )
+        let var_name = format!("{:?}", arg);
+        vir::LocalVar::new(var_name, vir::Type::TypedRef(format!("{:?}", arg_ty)))
     }
 
 //     fn path_to_string(&self, var_path: &hir::Path) -> String {
@@ -367,8 +381,14 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecEncoder<'p, 'v, 'tcx> {
                     .collect(),
                 self.encode_assertion(body),
             ),
-            // FIXME on_join
+            // FIXME on_join, maybe return a magic wand here
             box typed::AssertionKind::OnJoin(ref expr, ref assertion) => self.encode_assertion(assertion)
+            // box typed::AssertionKind::OnJoin(ref var, ref body) => vir::Expr::onjoin(
+            //     var.vars.iter().map(|(arg, ty)| self.encode_forall_arg(
+            //         *arg, ty
+            //     )).collect(),
+            //     self.encode_assertion(body)
+            // )
         }
     }
 

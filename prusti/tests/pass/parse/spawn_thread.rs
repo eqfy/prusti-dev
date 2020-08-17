@@ -10,27 +10,41 @@
 use prusti_contracts::*;
 use std::thread;
 
-#[ensures="on_join(*x == (old(*x) + 1) * 2)"]
-fn spawn_double_thread (mut x : Box<i32>) -> thread::JoinHandle<Box<i32>> {
-    *x = *x + 1;
-    #[ensures="*x == old(*x) * 2"]
-        thread::spawn(move || {
-        thread::sleep(Duration::from_millis(50));
-        *x += *x;
-        x
+#[ensures(on_join(result, result == 1))]
+fn spawn_thread () -> thread::JoinHandle<i32> {
+    thread::spawn(
+        #[t_ensures(result == 1)] || {
+        1
     })
 }
 
-#[ensures="on_join[0](*x == (old(*x) + 1) * 2)"]
-fn spawn_multiple_thread (mut x : Box<i32>) -> Vec<thread::JoinHandle<Box<i32>>> {
-    *x = *x + 1;
-    #[ensures="*x == old(*x) * 2"]
-        let t = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(50));
-        *x += *x;
-        x
-    });
-    vec!(t)
+#[requires(on_join(t, result == 1))]
+fn receive_thread (t : thread::JoinHandle<i32>) {
+    let num = t.join().unwrap();
+    assert!(*num == 1);
 }
+
+// #[ensures(on_join(result, *result == (old(*x) + 1) * 2))]
+// fn spawn_double_thread (mut x : Box<i32>) -> thread::JoinHandle<Box<i32>> {
+//     *x = *x + 1;
+//     thread::spawn(
+//         #[t_ensures(*x == old(*x) * 2)] move || {
+//         thread::sleep(Duration::from_millis(50));
+//         *x += *x;
+//         x
+//     })
+// }
+// Unsupported
+// #[ensures="on_join(result[0], *result == (old(*x) + 1) * 2)"]
+// fn spawn_multiple_thread (mut x : Box<i32>) -> Vec<thread::JoinHandle<Box<i32>>> {
+//     *x = *x + 1;
+//     #[ensures="*x == old(*x) * 2"]
+//         let t = thread::spawn(move || {
+//         thread::sleep(Duration::from_millis(50));
+//         *x += *x;
+//         x
+//     });
+//     vec!(t)
+// }
 
 fn main() {}

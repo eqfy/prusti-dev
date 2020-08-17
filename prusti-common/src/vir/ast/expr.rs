@@ -37,6 +37,9 @@ pub enum Expr {
     Cond(Box<Expr>, Box<Expr>, Box<Expr>, Position),
     /// ForAll: variables, triggers, body
     ForAll(Vec<LocalVar>, Vec<Trigger>, Box<Expr>, Position),
+    // // FIXME OnJoin may not be appropirate here
+    // /// OnJoin: variable, body
+    // OnJoin(LocalVar, Box<Expr>, Position),
     /// let variable == (expr) in body
     LetExpr(LocalVar, Box<Expr>, Box<Expr>, Position),
     /// FuncApp: function_name, args, formal_args, return_type, Viper position
@@ -144,6 +147,11 @@ impl fmt::Display for Expr {
                     .join(", "),
                 body.to_string()
             ),
+            // Expr::OnJoin(ref var, ref body, ref _pos) => write!(
+            //     // Fixme this might not be used
+            //     f,
+            //     "OnJoin"
+            // ),
             Expr::LetExpr(ref var, ref expr, ref body, ref _pos) => write!(
                 f,
                 "(let {:?} == ({}) in {})",
@@ -420,6 +428,10 @@ impl Expr {
     pub fn forall(vars: Vec<LocalVar>, triggers: Vec<Trigger>, body: Expr) -> Self {
         Expr::ForAll(vars, triggers, box body, Position::default())
     }
+    //
+    // pub fn onjoin(var: LocalVar, body: Expr) -> Self {
+    //     Expr::OnJoin(var, box body, Position::default())
+    // }
 
     pub fn ite(guard: Expr, left: Expr, right: Expr) -> Self {
         Expr::Cond(box guard, box left, box right, Position::default())
