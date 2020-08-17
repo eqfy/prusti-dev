@@ -20,11 +20,10 @@ mod private {
     /// A macro for marking a function as trusted.
     pub use prusti_contracts_impl::trusted;
 
+    /// A macro for writing a loop body invariant.
+    pub use prusti_contracts_impl::body_invariant;
     /// A macro for writing a loop invariant.
     pub use prusti_contracts_impl::invariant;
-
-    /// A macro for writing a postcondition on a thread.
-    pub use prusti_contracts_impl::t_ensures;
 }
 
 #[cfg(feature = "prusti")]
@@ -47,8 +46,8 @@ mod private {
     /// A macro for marking a function as trusted.
     pub use prusti_contracts_internal::trusted;
 
-    /// A macro for writing a loop invariant.
-    pub use prusti_contracts_internal::invariant;
+    /// A macro for writing a loop body invariant.
+    pub use prusti_contracts_internal::body_invariant;
 
     /// A macro for writing a postcondition on a thread.
     pub use prusti_contracts_internal::t_ensures;
