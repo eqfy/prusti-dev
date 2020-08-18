@@ -135,10 +135,8 @@ impl AstRewriter {
         assertion.encode_type_check(&mut statements);
         let spec_id_str = spec_id.to_string();
         let assertion_json = crate::specifications::json::to_json_string(&assertion);
-        let spec_type = "invariant".to_string();
         quote! {
             #[prusti::spec_only]
-            #[prusti::spec_type = #spec_type]
             #[prusti::spec_id = #spec_id_str]
             #[prusti::assertion = #assertion_json]
             let _prusti_loop_invariant =
@@ -172,11 +170,10 @@ impl AstRewriter {
         assertion.encode_type_check(&mut statements);
         let spec_id_str = spec_id.to_string();
         let assertion_json = crate::specifications::json::to_json_string(&assertion);
-        let spec_type = "t_ensures".to_string();
         quote! {
+            #[prusti::spec_only]
             |result: #rtype| {
                 #[prusti::spec_only]
-                #[prusti::spec_type = #spec_type]
                 #[prusti::spec_id = #spec_id_str]
                 #[prusti::assertion = #assertion_json]
                 let _prusti_thread_postcondition = {

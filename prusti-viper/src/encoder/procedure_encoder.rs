@@ -346,6 +346,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             }
         }
 
+        // TODO maybe preprocess threads
+
         // Load Polonius info
         self.polonius_info = Some(
             PoloniusInfo::new(&self.procedure, &self.cached_loop_invariant_block)
@@ -4804,6 +4806,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 stmts
             }
 
+            // FIXME closures are used in thread spawns (which are not specs)
             &mir::AggregateKind::Closure(def_id, _substs) => {
                 assert!(self.encoder.is_spec_closure(def_id), "closure: {:?}", def_id);
                 // Specification only. Just ignore in the encoding.

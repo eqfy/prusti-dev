@@ -198,16 +198,14 @@ impl<'tcx> intravisit::Visitor<'tcx> for SpecCollector<'tcx> {
     fn visit_local(&mut self, local: &'tcx rustc_hir::Local<'tcx>) {
         let mut clean_spec_item = false;
         if has_spec_only_attr(&local.attrs) {
-            let spec_type  = SpecType::try_from(
-                read_attr("spec_type", &local.attrs)
-                .expect("missing local_type for local position (either invariant/thread_post)")
-                .as_str()
-            ).unwrap();
-            match spec_type {
-                SpecType::Precondition => unreachable!(), 
-                SpecType::Postcondition => unreachable!(),
-                _ => ()
-            }
+            let local_name = local.pat.simple_ident().unwrap().name.to_ident_string();
+            let spec_type = if local_name.eq("_prusti_thread_postcondition") {
+                SpecType::ThreadPostcondition
+            } else if local_name.eq("_prusti_loop_invariant") {
+                SpecType::Invariant
+            } else {
+                unreachable!();
+            };
             let spec_item = SpecItem {
                 spec_id: read_attr("spec_id", &local.attrs)
                     .expect("missing spec_id on invariant/thread_post")

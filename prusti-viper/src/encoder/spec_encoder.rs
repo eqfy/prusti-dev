@@ -392,6 +392,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> SpecEncoder<'p, 'v, 'tcx> {
         }
     }
 
+    // encode an expression in the a specification
     fn encode_expression(&self, assertion_expr: &typed::Expression) -> vir::Expr {
         debug!("encode_expression {:?}", assertion_expr);
         let tcx = self.encoder.env().tcx();
