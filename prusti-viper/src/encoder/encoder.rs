@@ -6,7 +6,7 @@
 
 use ::log::{debug, trace};
 use crate::encoder::borrows::{compute_procedure_contract, ProcedureContract, ProcedureContractMirDef};
-use crate::encoder::builtin_encoder::BuiltinEncoder;
+use crate::encoder::builtin_encoder::{BuiltinEncoder, BuiltinPredicateKind};
 use crate::encoder::builtin_encoder::BuiltinFunctionKind;
 use crate::encoder::builtin_encoder::BuiltinMethodKind;
 use crate::encoder::errors::{ErrorCtxt, ErrorManager, EncodingError, PrustiError};
@@ -69,6 +69,7 @@ pub struct Encoder<'v, 'tcx: 'v> {
     procedure_contracts: RefCell<HashMap<ProcedureDefId, ProcedureContractMirDef<'tcx>>>,
     builtin_methods: RefCell<HashMap<BuiltinMethodKind, vir::BodylessMethod>>,
     builtin_functions: RefCell<HashMap<BuiltinFunctionKind, vir::Function>>,
+    builtin_predicates: RefCell<HashMap<BuiltinPredicateKind, vir::Predicate>>,
     procedures: RefCell<HashMap<ProcedureDefId, vir::CfgMethod>>,
     pure_function_bodies: RefCell<HashMap<(ProcedureDefId, String), vir::Expr>>,
     pure_functions: RefCell<HashMap<(ProcedureDefId, String), vir::Function>>,
@@ -136,6 +137,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             procedure_contracts: RefCell::new(HashMap::new()),
             builtin_methods: RefCell::new(HashMap::new()),
             builtin_functions: RefCell::new(HashMap::new()),
+            builtin_predicates: RefCell::new(HashMap::new()),
             procedures: RefCell::new(HashMap::new()),
             pure_function_bodies: RefCell::new(HashMap::new()),
             pure_functions: RefCell::new(HashMap::new()),
@@ -194,6 +196,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         self.encode_builtin_method_def(BuiltinMethodKind::HavocBool);
         self.encode_builtin_method_def(BuiltinMethodKind::HavocInt);
         self.encode_builtin_method_def(BuiltinMethodKind::HavocRef);
+        self.encode_builtin_predicate_def(BuiltinPredicateKind::BuiltinInt);
     }
 
     pub fn env(&self) -> &'v Environment<'tcx> {
@@ -947,6 +950,27 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             vir::Type::Bool,
             position,
         )
+    }
+
+    pub fn encode_builtin_predicate_def(&self, predicate_kind: BuiltinPredicateKind) -> vir::Predicate {
+        trace!("encode_builtin_predicate_def({:?})", predicate_kind);
+        if !self.builtin_predicates.borrow().contains_key(&predicate_kind) {
+            let builtin_encoder = BuiltinEncoder::new();
+            let predicate = builtin_encoder.encode_builtin_predicate_def(predicate_kind);
+            self.log_vir_program_before_viper(predicate.to_string());
+            self.builtin_predicates
+                .borrow_mut()
+                .insert(predicate_kind.clone(), predicate);
+        }
+        self.builtin_predicates.borrow()[&predicate_kind].clone()
+    }
+
+    pub fn encode_builtin_predicate_use(&self, predicate_kind: BuiltinPredicateKind) -> String {
+        trace!("encode_builtin_predicate_use({:?})", predicate_kind);
+        // Trigger encoding of definition
+        self.encode_builtin_predicate_def(predicate_kind);
+        let builtin_encoder = BuiltinEncoder::new();
+        builtin_encoder.encode_builtin_predicate_name(predicate_kind)
     }
 
     pub fn encode_builtin_method_def(&self, method_kind: BuiltinMethodKind) -> vir::BodylessMethod {

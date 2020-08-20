@@ -10,7 +10,7 @@ pub use self::conversions::*;
 pub use self::to_viper::*;
 pub use self::program::*;
 
-mod ast;
+pub mod ast;
 pub mod borrows;
 mod cfg;
 mod conversions;

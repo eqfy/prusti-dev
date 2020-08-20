@@ -295,10 +295,18 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                     debug!("ADT {:?} has only one variant", adt_def);
                     // FIXME This uses a debug trait hack, consider replacing with actual adt_def for JoinHandle
                     let fields = if format!("{:?}", adt_def) == "std::thread::JoinHandle" {
-                        let field_name = "JoinHandleId";
+                        use crate::encoder::builtin_encoder::BuiltinEncoder;
+                        use crate::encoder::builtin_encoder::BuiltinPredicateKind::BuiltinInt;
+                        let field_name = "join_handle_id";
                         let viper_field_name = format!("f${}", field_name);
-                        // We directly use Int type to represent the id
-                        let field = vir::Field::new(viper_field_name, vir::Type::Int);
+                        // Note that we use a builtin Int here due to the limitation of not
+                        // being able to construct any int type with the desired 'tcx lifetime
+                        let field = vir::Field::new(
+                            viper_field_name,
+                            {
+                                let builtin_encoder = BuiltinEncoder::new();
+                                vir::Type::TypedRef(builtin_encoder.encode_builtin_predicate_name(BuiltinInt))
+                            });
                         vec![field]
                     } else {
                         adt_def.variants[0usize.into()]
@@ -311,7 +319,6 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                             })
                             .collect()
                     };
-                    debug!("Finished encoding predicate def for {:?}", self.ty);
                     vec![vir::Predicate::new_struct(typ, fields)]
                 } else {
                     debug!("ADT {:?} has {} variants", adt_def, num_variants);

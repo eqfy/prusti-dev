@@ -5,6 +5,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use prusti_common::vir;
+use prusti_common::vir::{Expr, PermAmount};
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum BuiltinMethodKind {
@@ -19,6 +20,11 @@ pub enum BuiltinFunctionKind {
     Unreachable(vir::Type),
     /// type
     Undefined(vir::Type),
+}
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum BuiltinPredicateKind {
+    BuiltinInt,
 }
 
 pub struct BuiltinEncoder {}
@@ -86,6 +92,33 @@ impl BuiltinEncoder {
                 posts: vec![],
                 body: None,
             },
+        }
+    }
+
+    pub fn encode_builtin_predicate_name(&self, predicate: BuiltinPredicateKind) -> String {
+        match predicate {
+            BuiltinPredicateKind::BuiltinInt => "builtin$builtin_int".to_string(),
+        }
+    }
+
+    pub fn encode_builtin_predicate_def(&self, predicate: BuiltinPredicateKind) -> vir::Predicate {
+        let predicate_name = self.encode_builtin_predicate_name(predicate);
+        match predicate {
+            BuiltinPredicateKind::BuiltinInt => {
+                // TODO move this to a method in vir predicate
+                let field = vir::Field::new("val_int", vir::Type::Int);
+                use prusti_common::vir;
+                let this = vir::Predicate::construct_this(vir::Type::Int);
+                let val_field = vir::ast::Expr::from(this.clone()).field(field);
+                let perm = Expr::acc_permission(val_field, PermAmount::Write);
+                vir::Predicate::Struct(
+                    vir::StructPredicate {
+                        name: predicate_name,
+                        this: this,
+                        body: Some(perm),
+                    }
+                )
+            }
         }
     }
 }
