@@ -197,6 +197,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         self.encode_builtin_method_def(BuiltinMethodKind::HavocInt);
         self.encode_builtin_method_def(BuiltinMethodKind::HavocRef);
         self.encode_builtin_predicate_def(BuiltinPredicateKind::BuiltinInt);
+        self.encode_builtin_predicate_def(BuiltinPredicateKind::BuiltinTerminated);
     }
 
     pub fn env(&self) -> &'v Environment<'tcx> {

@@ -25,6 +25,7 @@ pub enum BuiltinFunctionKind {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
 pub enum BuiltinPredicateKind {
     BuiltinInt,
+    BuiltinTerminated,
 }
 
 pub struct BuiltinEncoder {}
@@ -98,6 +99,7 @@ impl BuiltinEncoder {
     pub fn encode_builtin_predicate_name(&self, predicate: BuiltinPredicateKind) -> String {
         match predicate {
             BuiltinPredicateKind::BuiltinInt => "builtin$builtin_int".to_string(),
+            BuiltinPredicateKind::BuiltinTerminated => {"builtin$terminated"}.to_string(),
         }
     }
 
@@ -109,7 +111,14 @@ impl BuiltinEncoder {
                 vir::Predicate::new_builtin_value(
                     predicate_name,
                     vir::Type::Int,
-                    field
+                    vir::Field::new("val_int", vir::Type::Int),
+                )
+            }
+            BuiltinPredicateKind::BuiltinTerminated => {
+                vir::Predicate::new_builtin_value(
+                    predicate_name,
+                    vir::Type::Bool,
+                    vir::Field::new("val_bool", vir::Type::Bool),
                 )
             }
         }
