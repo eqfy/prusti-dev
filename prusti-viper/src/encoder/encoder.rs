@@ -104,6 +104,8 @@ pub struct Encoder<'v, 'tcx: 'v> {
     vir_program_before_viper_writer: RefCell<Box<Write>>,
     pub typaram_repl: RefCell<Vec<HashMap<ty::Ty<'tcx>, ty::Ty<'tcx>>>>,
     encoding_errors_counter: RefCell<usize>,
+    // Maps thread post condition ids to related magic wands, true if in the magic wand is in scope
+    // thread_post_condition_result: RefCell<HashMap<String, (vir::Expr, bool)>>,
 }
 
 impl<'v, 'tcx> Encoder<'v, 'tcx> {

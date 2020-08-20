@@ -286,15 +286,22 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                 vec![vir::Predicate::new_struct(typ, fields)]
             }
 
-            ty::TyKind::Adt(adt_def, subst) if !adt_def.is_box() => {
-                if !self.is_supported_struct_type(adt_def, subst) {
-                    vec![vir::Predicate::new_abstract(typ)]
-                } else {
-                    let num_variants = adt_def.variants.len();
-                    let tcx = self.encoder.env().tcx();
-                    if num_variants == 1 {
-                        debug!("ADT {:?} has only one variant", adt_def);
-                        let fields = adt_def.variants[0usize.into()]
+            ty::TyKind::Adt(adt_def, subst) if !adt_def.is_box() => if !self.is_supported_struct_type(adt_def, subst) {
+                vec![vir::Predicate::new_abstract(typ)]
+            } else {
+                let num_variants = adt_def.variants.len();
+                let tcx = self.encoder.env().tcx();
+                if num_variants == 1 {
+                    debug!("ADT {:?} has only one variant", adt_def);
+                    // FIXME This uses a debug trait hack, consider replacing with actual adt_def for JoinHandle
+                    let fields = if format!("{:?}", adt_def) == "std::thread::JoinHandle" {
+                        let field_name = "JoinHandleId";
+                        let viper_field_name = format!("f${}", field_name);
+                        // We directly use Int type to represent the id
+                        let field = vir::Field::new(viper_field_name, vir::Type::Int);
+                        vec![field]
+                    } else {
+                        adt_def.variants[0usize.into()]
                             .fields
                             .iter()
                             .map(|field| {
@@ -302,65 +309,66 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                                 let field_ty = field.ty(tcx, subst);
                                 self.encoder.encode_struct_field(&field_name, field_ty)
                             })
-                            .collect();
-                        vec![vir::Predicate::new_struct(typ, fields)]
-                    } else {
-                        debug!("ADT {:?} has {} variants", adt_def, num_variants);
-                        let discriminant_field = self.encoder.encode_discriminant_field();
-                        let this = vir::Predicate::construct_this(typ.clone());
-                        let discriminant_loc =
-                            vir::Expr::from(this.clone()).field(discriminant_field);
-                        let discriminant_bounds =
-                            compute_discriminant_bounds(adt_def, tcx, &discriminant_loc);
+                            .collect()
+                    };
+                    debug!("Finished encoding predicate def for {:?}", self.ty);
+                    vec![vir::Predicate::new_struct(typ, fields)]
+                } else {
+                    debug!("ADT {:?} has {} variants", adt_def, num_variants);
+                    let discriminant_field = self.encoder.encode_discriminant_field();
+                    let this = vir::Predicate::construct_this(typ.clone());
+                    let discriminant_loc =
+                        vir::Expr::from(this.clone()).field(discriminant_field);
+                    let discriminant_bounds =
+                        compute_discriminant_bounds(adt_def, tcx, &discriminant_loc);
 
-                        let discriminant_values = compute_discriminant_values(adt_def, tcx);
-                        let variants: Vec<_> = adt_def
-                            .variants
-                            .iter()
-                            .zip(discriminant_values)
-                            .map(|(variant_def, variant_index)| {
-                                let fields = variant_def
-                                    .fields
-                                    .iter()
-                                    .map(|field| {
-                                        debug!("Encoding field {:?}", field);
-                                        let field_name = &field.ident.as_str();
-                                        let field_ty = field.ty(tcx, subst);
-                                        self.encoder.encode_struct_field(field_name, field_ty)
-                                    })
-                                    .collect();
-                                let variant_name = &variant_def.ident.as_str();
-                                let guard = vir::Expr::eq_cmp(
-                                    discriminant_loc.clone().into(),
-                                    variant_index.into(),
-                                );
-                                let variant_typ = typ.clone().variant(variant_name);
-                                (
-                                    guard,
-                                    variant_name.to_string(),
-                                    vir::StructPredicate::new(variant_typ, fields),
-                                )
-                            })
-                            .collect();
-                        for (_, name, _) in &variants {
-                            self.encoder.encode_enum_variant_field(name);
-                        }
-                        let mut predicates: Vec<_> = variants
-                            .iter()
-                            .filter(|(_, _, predicate)| !predicate.has_empty_body())
-                            .map(|(_, _, predicate)| vir::Predicate::Struct(predicate.clone()))
-                            .collect();
-                        let enum_predicate = vir::Predicate::new_enum(
-                            this,
-                            discriminant_loc,
-                            discriminant_bounds,
-                            variants,
-                        );
-                        predicates.push(enum_predicate);
-                        predicates
+                    let discriminant_values = compute_discriminant_values(adt_def, tcx);
+                    let variants: Vec<_> = adt_def
+                        .variants
+                        .iter()
+                        .zip(discriminant_values)
+                        .map(|(variant_def, variant_index)| {
+                            let fields = variant_def
+                                .fields
+                                .iter()
+                                .map(|field| {
+                                    debug!("Encoding field {:?}", field);
+                                    let field_name = &field.ident.as_str();
+                                    let field_ty = field.ty(tcx, subst);
+                                    self.encoder.encode_struct_field(field_name, field_ty)
+                                })
+                                .collect();
+                            let variant_name = &variant_def.ident.as_str();
+                            let guard = vir::Expr::eq_cmp(
+                                discriminant_loc.clone().into(),
+                                variant_index.into(),
+                            );
+                            let variant_typ = typ.clone().variant(variant_name);
+                            (
+                                guard,
+                                variant_name.to_string(),
+                                vir::StructPredicate::new(variant_typ, fields),
+                            )
+                        })
+                        .collect();
+                    for (_, name, _) in &variants {
+                        self.encoder.encode_enum_variant_field(name);
                     }
+                    let mut predicates: Vec<_> = variants
+                        .iter()
+                        .filter(|(_, _, predicate)| !predicate.has_empty_body())
+                        .map(|(_, _, predicate)| vir::Predicate::Struct(predicate.clone()))
+                        .collect();
+                    let enum_predicate = vir::Predicate::new_enum(
+                        this,
+                        discriminant_loc,
+                        discriminant_bounds,
+                        variants,
+                    );
+                    predicates.push(enum_predicate);
+                    predicates
                 }
-            }
+            },
 
             ty::TyKind::Adt(ref adt_def, ref _subst) if adt_def.is_box() => {
                 let num_variants = adt_def.variants.len();
