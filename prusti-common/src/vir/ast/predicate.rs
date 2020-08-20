@@ -71,6 +71,20 @@ impl Predicate {
             body: Some(body),
         })
     }
+    /// Constructs a new predicate that represents a builtin type, currently this function only
+    /// support integer or boolean types
+    pub fn new_builtin_value (name: String, typ: Type, field: Field) -> Predicate {
+        let this = Predicate::construct_this(typ);
+        let val_field = Expr::from(this.clone()).field(field);
+        let perm = Expr::acc_permission(val_field, PermAmount::Write);
+        Predicate::Struct(
+            StructPredicate {
+                name,
+                this,
+                body: Some(perm),
+            }
+        )
+    }
     /// Construct a predicate that corresponds to a composite type that has only one variant such
     /// as `struct` or `tuple`.
     pub fn new_struct(typ: Type, fields: Vec<Field>) -> Predicate {

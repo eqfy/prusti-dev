@@ -105,18 +105,11 @@ impl BuiltinEncoder {
         let predicate_name = self.encode_builtin_predicate_name(predicate);
         match predicate {
             BuiltinPredicateKind::BuiltinInt => {
-                // TODO move this to a method in vir predicate
                 let field = vir::Field::new("val_int", vir::Type::Int);
-                use prusti_common::vir;
-                let this = vir::Predicate::construct_this(vir::Type::Int);
-                let val_field = vir::ast::Expr::from(this.clone()).field(field);
-                let perm = Expr::acc_permission(val_field, PermAmount::Write);
-                vir::Predicate::Struct(
-                    vir::StructPredicate {
-                        name: predicate_name,
-                        this: this,
-                        body: Some(perm),
-                    }
+                vir::Predicate::new_builtin_value(
+                    predicate_name,
+                    vir::Type::Int,
+                    field
                 )
             }
         }
