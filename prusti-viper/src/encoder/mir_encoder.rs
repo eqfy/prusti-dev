@@ -57,6 +57,7 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
         place: &mir::Place<'tcx>,
     ) -> Result<(vir::Expr, ty::Ty<'tcx>, Option<usize>), ErrorCtxt> {
         trace!("Encode place {:?}", place);
+        self.check_is_join_handle(place);
         let result = if place.projection.is_empty() {
             let local = place.local;
             (
@@ -68,6 +69,16 @@ pub trait PlaceEncoder<'v, 'tcx: 'v> {
             self.encode_projection(place.projection.len(), *place, None)
         };
         Ok(result)
+    }
+
+    fn check_is_join_handle(
+        &self,
+        place: &mir::Place<'tcx>,
+    ) -> bool {
+        let local = place.local;
+        let ty = self.get_local_ty(local);
+        // debug!("type of place {:?} {:?}", place, ty);
+        false
     }
 
     /// - `encoded_base_place`: optionally, the already encoded place (otherwise

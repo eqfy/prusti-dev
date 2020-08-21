@@ -396,7 +396,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         }
 
         // Encode all blocks
-        let (opt_body_head, unresolved_edges) = self.encode_blocks_group(
+        let (opt_body_head, unresolved_edges) = self. encode_blocks_group(
             "",
             &self.procedure.get_reachable_nonspec_cfg_blocks(),
             0,

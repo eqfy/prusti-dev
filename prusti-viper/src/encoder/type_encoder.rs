@@ -432,6 +432,12 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             }
 
             ty::TyKind::Adt(adt_def, subst) => {
+                // FIXME this allows types like std::result::Result<i32, std::boxed::Box<dyn std::any::Any + std::marker::Send>>
+                // to be encoded despite the dynamic trait. This is used currently for supporting the joining of threads
+                let mut only_first = false;
+                if format!("{:?}", adt_def) == "std::result::Result" {
+                    only_first = true;
+                }
                 let mut composed_name = vec![self.encoder.encode_item_name(adt_def.did)];
                 composed_name.push("_beg_".to_string()); // makes generics "less fragile"
                 let mut first = true;
@@ -445,6 +451,7 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                     if let ty::subst::GenericArgKind::Type(ty) = kind.unpack() {
                         composed_name.push(self.encoder.encode_type_predicate_use(ty)?)
                     }
+                    if only_first { break }
                 }
                 composed_name.push("_end_".to_string()); // makes generics "less fragile"
                 composed_name.join("$")
