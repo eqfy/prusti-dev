@@ -22,6 +22,9 @@ mod private {
 
     /// A macro for writing a loop body invariant.
     pub use prusti_contracts_impl::body_invariant;
+
+    /// A macro for defining a closure with a specification.
+    pub use prusti_contracts_impl::closure;
     /// A macro for writing a loop invariant.
     pub use prusti_contracts_impl::invariant;
 }
@@ -51,6 +54,9 @@ mod private {
 
     /// A macro for writing a postcondition on a thread.
     pub use prusti_contracts_internal::t_ensures;
+
+    /// A macro for defining a closure with a specification.
+    pub use prusti_contracts_internal::closure;
 }
 
 

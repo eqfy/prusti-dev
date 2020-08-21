@@ -42,3 +42,8 @@ pub fn body_invariant(_tokens: TokenStream) -> TokenStream {
 pub fn t_ensures(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
     tokens
 }
+
+#[proc_macro]
+pub fn closure(tokens: TokenStream) -> TokenStream {
+    prusti_specs::closure(tokens.into(), true).into()
+}
