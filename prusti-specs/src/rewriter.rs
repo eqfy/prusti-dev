@@ -156,6 +156,21 @@ impl AstRewriter {
             Ok(data) => data,
             Err(err) => return err.to_compile_error(),
         };
+        // todo due to issues with figuring out the return type of closures, only closures
+        // right after the t_ensures are supported currently
+        // let closure_item: Result<syn::ExprClosure, err> = syn::parse2(tokens.clone());
+        // let block_item: Result<syn::Block, err> = syn::parse2(tokens.clone());
+        // if Err(e) == closure_item && Err(e) == block_item{
+        //     return syn::Error::new(
+        //         tokens.span(),
+        //         "A closure or block expected"
+        //     ).to_compile_error()
+        // } else if Ok (item) == closure_item {
+        //     // todo move code below into here
+        // } else {
+        //     // recursively search for the closure return type in the block
+        // }
+
         let rtype = match match item.output {
             syn::ReturnType::Type(_0, _1) => Ok(*_1),
             syn::ReturnType::Default => Err(syn::Error::new(

@@ -20,6 +20,7 @@ pub enum BuiltinFunctionKind {
     Unreachable(vir::Type),
     /// type
     Undefined(vir::Type),
+    // todo builtin lookup function
 }
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]

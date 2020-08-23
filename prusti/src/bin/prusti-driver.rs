@@ -26,7 +26,7 @@ fn pause() {
 }
 
 fn main() {
-    pause();
+    // pause();
     rustc_driver::install_ice_hook();
 
     // If the environment asks us to actually be rustc, then do that.

@@ -100,6 +100,16 @@ pub struct Encoder<'v, 'tcx: 'v> {
             Vec<ty::Ty<'tcx>>,
         )>,
     >,
+    closure_instantiations_non_spec: HashMap<
+        DefId,
+        Vec<(
+            ProcedureDefId,
+            mir::BasicBlock,
+            usize,
+            Vec<mir::Operand<'tcx>>,
+            Vec<ty::Ty<'tcx>>,
+        )>,
+    >,
     encoding_queue: RefCell<Vec<(ProcedureDefId, Vec<(ty::Ty<'tcx>, ty::Ty<'tcx>)>)>>,
     vir_program_before_foldunfold_writer: RefCell<Box<Write>>,
     vir_program_before_viper_writer: RefCell<Box<Write>>,
@@ -153,6 +163,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             memory_eq_funcs: RefCell::new(HashMap::new()),
             fields: RefCell::new(HashMap::new()),
             closure_instantiations: HashMap::new(),
+            closure_instantiations_non_spec: HashMap::new(),
             encoding_queue: RefCell::new(vec![]),
             vir_program_before_foldunfold_writer,
             vir_program_before_viper_writer,
@@ -333,40 +344,65 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         debug!("Collecting closure instantiations...");
         let tcx = self.env().tcx();
         let mut closure_instantiations: HashMap<DefId, Vec<_>> = HashMap::new();
+        let mut closure_instantiations_non_spec: HashMap<DefId, Vec<_>> = HashMap::new();
         let crate_num = hir::def_id::LOCAL_CRATE;
         for &mir_def_id in tcx.mir_keys(crate_num).iter() {
-            if !(self
+            if self
                 .env()
-                .has_attribute_name(mir_def_id.to_def_id(), "spec_only"))
-            {
-                continue;
-            }
-            trace!("Collecting closure instantiations for mir {:?}", mir_def_id);
-            let (mir, _) = tcx.mir_validated(ty::WithOptConstParam::unknown(mir_def_id));
-            let mir = &*mir.borrow();
-            for (bb_index, bb_data) in mir.basic_blocks().iter_enumerated() {
-                for (stmt_index, stmt) in bb_data.statements.iter().enumerate() {
-                    if let mir::StatementKind::Assign(
-                        box (
-                        _,
-                        mir::Rvalue::Aggregate(
-                            box mir::AggregateKind::Closure(cl_def_id, _),
-                            ref operands,
-                        ),
-                    )
-                    ) = stmt.kind
-                    {
-                        trace!("Found closure instantiation: {:?}", stmt);
-                        let operand_tys = operands.iter().map(|operand| operand.ty(mir, tcx)).collect();
-                        let instantiations =
-                            closure_instantiations.entry(cl_def_id).or_insert(vec![]);
-                        instantiations.push((mir_def_id.to_def_id(), bb_index, stmt_index, operands.clone(), operand_tys))
+                .has_attribute_name(mir_def_id.to_def_id(), "spec_only") {
+                trace!("Collecting spec closure instantiations for mir {:?}", mir_def_id);
+                let (mir, _) = tcx.mir_validated(ty::WithOptConstParam::unknown(mir_def_id));
+                let mir = &*mir.borrow();
+                for (bb_index, bb_data) in mir.basic_blocks().iter_enumerated() {
+                    for (stmt_index, stmt) in bb_data.statements.iter().enumerate() {
+                        if let mir::StatementKind::Assign(
+                            box (
+                                _,
+                                mir::Rvalue::Aggregate(
+                                    box mir::AggregateKind::Closure(cl_def_id, _),
+                                    ref operands,
+                                ),
+                            )
+                        ) = stmt.kind
+                        {
+                            trace!("Found spec closure instantiation: {:?}", stmt);
+                            let operand_tys = operands.iter().map(|operand| operand.ty(mir, tcx)).collect();
+                            let instantiations =
+                                closure_instantiations.entry(cl_def_id).or_insert(vec![]);
+                            instantiations.push((mir_def_id.to_def_id(), bb_index, stmt_index, operands.clone(), operand_tys))
+                        }
                     }
                 }
-            }
+            } else {
+                    trace!("Collecting non spec closure instantiations for mir {:?}", mir_def_id);
+                    let (mir, _) = tcx.mir_validated(ty::WithOptConstParam::unknown(mir_def_id));
+                    let mir = &*mir.borrow();
+                    for (bb_index, bb_data) in mir.basic_blocks().iter_enumerated() {
+                        for (stmt_index, stmt) in bb_data.statements.iter().enumerate() {
+                            if let mir::StatementKind::Assign(
+                                box (
+                                    _,
+                                    mir::Rvalue::Aggregate(
+                                        box mir::AggregateKind::Closure(cl_def_id, _),
+                                        ref operands,
+                                    ),
+                                )
+                            ) = stmt.kind
+                            {
+                                trace!("Found non spec closure instantiation: {:?}", stmt);
+                                let operand_tys = operands.iter().map(|operand| operand.ty(mir, tcx)).collect();
+                                let instantiations =
+                                    closure_instantiations_non_spec.entry(cl_def_id).or_insert(vec![]);
+                                instantiations.push((mir_def_id.to_def_id(), bb_index, stmt_index, operands.clone(), operand_tys))
+                            }
+                        }
+                    }
+                }
         }
-        debug!("closure_instantiations: {:?}", closure_instantiations);
+        debug!("spec closure_instantiations: {:?}", closure_instantiations);
+        debug!("non spec closure_instantiations: {:?}", closure_instantiations);
         self.closure_instantiations = closure_instantiations;
+        self.closure_instantiations_non_spec = closure_instantiations_non_spec;
     }
 
     pub fn get_closure_instantiations(
@@ -558,22 +594,22 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         //     }
         // }
 
-    //     if let Some(ty) = self_ty {
-    //         if let Some(id) = self.env().tcx().trait_of_item(proc_def_id) {
-    //             let proc_name = self.env().tcx().item_name(proc_def_id).as_symbol();
-    //             let procs = self.env().get_trait_method_decl_for_type(ty, id, proc_name);
-    //             if procs.len() == 1 {
-    //                 // FIXME(@jakob): if several methods are found, we currently don't know which
-    //                 // one to pick.
-    //                 let item = procs[0];
-    //                 if let Some(spec) = self.get_spec_by_def_id(item.def_id) {
-    //                     impl_spec = spec.clone();
-    //                 } else {
-    //                     debug!("Procedure {:?} has no specification", item.def_id);
-    //                 }
-    //             }
-    //         }
-    //     }
+        // if let Some(ty) = self_ty {
+        //     if let Some(id) = self.env().tcx().trait_of_item(proc_def_id) {
+        //         let proc_name = self.env().tcx().item_name(proc_def_id).as_symbol();
+        //         let procs = self.env().get_trait_method_decl_for_type(ty, id, proc_name);
+        //         if procs.len() == 1 {
+        //             // FIXME(@jakob): if several methods are found, we currently don't know which
+        //             // one to pick.
+        //             let item = procs[0];
+        //             if let Some(spec) = self.get_spec_by_def_id(item.def_id) {
+        //                 impl_spec = spec.clone();
+        //             } else {
+        //                 debug!("Procedure {:?} has no specification", item.def_id);
+        //             }
+        //         }
+        //     }
+        // }
 
         // merge specifications
         let final_spec = fun_spec.refine(&impl_spec);
