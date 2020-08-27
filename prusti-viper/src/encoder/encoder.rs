@@ -38,6 +38,7 @@ use rustc_hir::def_id::DefId;
 use rustc_middle::mir;
 // use rustc::mir::interpret::GlobalId;
 use rustc_middle::ty;
+use rustc_middle::ty::ClosureSubsts;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::io::Write;
@@ -85,10 +86,12 @@ pub struct Encoder<'v, 'tcx: 'v> {
     type_tags: RefCell<HashMap<String, vir::Function>>,
     type_discriminant_funcs: RefCell<HashMap<String, vir::Function>>,
     memory_eq_funcs: RefCell<HashMap<String, Option<vir::Function>>>,
-    fields: RefCell<HashMap<String, vir::Field>>,
+    // FIXME used in type encoder, remove the pub and create the getter method
+    pub fields: RefCell<HashMap<String, vir::Field>>,
     snapshots: RefCell<HashMap<String, Box<Snapshot>>>, // maps predicate names to snapshots
     type_snapshots: RefCell<HashMap<String, String>>, // maps snapshot names to predicate names
     snap_mirror_funcs: RefCell<HashMap<String, Option<vir::DomainFunc>>>,
+    // TODO introduce a struct for the vec used in closure_instantiations
     /// For each instantiation of each closure: DefId, basic block index, statement index, operands
     closure_instantiations: HashMap<
         DefId,
@@ -100,15 +103,17 @@ pub struct Encoder<'v, 'tcx: 'v> {
             Vec<ty::Ty<'tcx>>,
         )>,
     >,
-    closure_instantiations_non_spec: HashMap<
-        DefId,
-        Vec<(
-            ProcedureDefId,
-            mir::BasicBlock,
-            usize,
-            Vec<mir::Operand<'tcx>>,
-            Vec<ty::Ty<'tcx>>,
-        )>,
+    closure_instantiations_non_spec: RefCell<
+        HashMap<
+            DefId,
+            Vec<(
+                ProcedureDefId,
+                mir::BasicBlock,
+                usize,
+                Vec<mir::Operand<'tcx>>,
+                Vec<ty::Ty<'tcx>>,
+            )>
+        >,
     >,
     encoding_queue: RefCell<Vec<(ProcedureDefId, Vec<(ty::Ty<'tcx>, ty::Ty<'tcx>)>)>>,
     vir_program_before_foldunfold_writer: RefCell<Box<Write>>,
@@ -163,7 +168,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
             memory_eq_funcs: RefCell::new(HashMap::new()),
             fields: RefCell::new(HashMap::new()),
             closure_instantiations: HashMap::new(),
-            closure_instantiations_non_spec: HashMap::new(),
+            closure_instantiations_non_spec: RefCell::new(HashMap::new()),
             encoding_queue: RefCell::new(vec![]),
             vir_program_before_foldunfold_writer,
             vir_program_before_viper_writer,
@@ -383,7 +388,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
                                 box (
                                     _,
                                     mir::Rvalue::Aggregate(
-                                        box mir::AggregateKind::Closure(cl_def_id, _),
+                                        box mir::AggregateKind::Closure(cl_def_id, _substs),
                                         ref operands,
                                     ),
                                 )
@@ -402,7 +407,7 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
         debug!("spec closure_instantiations: {:?}", closure_instantiations);
         debug!("non spec closure_instantiations: {:?}", closure_instantiations);
         self.closure_instantiations = closure_instantiations;
-        self.closure_instantiations_non_spec = closure_instantiations_non_spec;
+        self.closure_instantiations_non_spec = RefCell::new(closure_instantiations_non_spec);
     }
 
     pub fn get_closure_instantiations(
@@ -666,6 +671,11 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
 
     pub fn encode_struct_field(&self, field_name: &str, ty: ty::Ty<'tcx>) -> vir::Field {
         let viper_field_name = format!("f${}", field_name);
+        self.encode_raw_ref_field(viper_field_name, ty)
+    }
+
+    pub fn encode_closure_field(&self, index: i32, ty: ty::Ty<'tcx>) -> vir::Field {
+        let viper_field_name = format!("closure_{}", index);
         self.encode_raw_ref_field(viper_field_name, ty)
     }
 

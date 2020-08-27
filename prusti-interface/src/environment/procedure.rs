@@ -7,12 +7,13 @@
 use super::loops;
 use crate::data::ProcedureDefId;
 use rustc_middle::mir::{self, Body as Mir};
-use rustc_middle::mir::{BasicBlock, Terminator, TerminatorKind};
+use rustc_middle::mir::{BasicBlock, Terminator, TerminatorKind, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use std::cell::Ref;
 use std::collections::HashSet;
 use rustc_span::Span;
 use log::{trace, debug};
+use std::borrow::{BorrowMut, Borrow};
 
 /// Index of a Basic Block
 pub type BasicBlockIndex = mir::BasicBlock;
@@ -56,17 +57,44 @@ impl<'a, 'tcx> Procedure<'a, 'tcx> {
     /// Returns all the types used in the procedure, and any types reachable from them
     pub fn get_declared_types(&self) -> Vec<Ty<'tcx>> {
         let mut types: HashSet<Ty> = HashSet::new();
-        // for var in &self.mir.local_decls {
-        //     for ty in var.ty.walk() {
-        //         let declared_ty = ty;
-        //         //let declared_ty = clean_type(tcx, ty);
-        //         //let declared_ty = tcx.erase_regions(&ty);
-        //         types.insert(declared_ty);
-        //     }
-        // }
-        // types.into_iter().collect()
-        unimplemented!();
+        for var in &self.mir.local_decls {
+            for ty in var.ty.walk() {
+                let declared_ty = ty;
+                //let declared_ty = clean_type(tcx, ty);
+                //let declared_ty = tcx.erase_regions(&ty);
+                types.insert(declared_ty.expect_ty());
+            }
+        }
+        types.into_iter().collect()
+        // unimplemented!();
 
+    }
+
+    /// Return all the local declarations of the procedure
+    pub fn get_local_decls(&self) -> Vec<LocalDecl<'_>> {
+        let mut result: Vec<LocalDecl<'_>> = Vec::new();
+        for var in &self.mir.local_decls {
+            // Fixme probably want references here
+            result.push(var.clone());
+        }
+        result
+    }
+
+    /// Return all the local declaration of arguments of the procedure
+    pub fn get_procedure_args(&self) -> Vec<LocalDecl<'_>> {
+        let num_args = &self.mir.arg_count;
+        let iter = &mut self.mir.local_decls.iter();
+        iter.next();
+        let mut result: Vec<LocalDecl<'_>> = Vec::new();
+        for i in 0..*num_args {
+            result.push(iter.next().unwrap().clone())
+        }
+        result
+    }
+
+    /// Get number of arguments of the procedure
+    pub fn get_arg_count(&self) -> usize {
+        self.mir.arg_count
     }
 
     /// Get definition ID of the procedure.

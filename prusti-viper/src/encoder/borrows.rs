@@ -11,7 +11,7 @@ use prusti_interface::data::ProcedureDefId;
 //     TypedSpecificationSet,
 // };
 use rustc_hir::{self as hir, Mutability};
-use rustc_middle::{mir, ty::FnSig};
+use rustc_middle::{mir, ty::FnSig, ty::ClosureSubsts};
 use rustc_index::vec::Idx;
 use rustc_middle::ty::{self, Ty, TyCtxt, TyKind, TypeckResults};
 // use rustc_data_structures::indexed_vec::Idx;
@@ -20,6 +20,7 @@ use std::fmt;
 use crate::utils::type_visitor::{self, TypeVisitor};
 use prusti_interface::specs::typed;
 use log::{trace, debug};
+use std::cell::RefCell;
 
 #[derive(Clone, Debug)]
 pub struct BorrowInfo<P>
@@ -379,8 +380,11 @@ where
 {
     trace!("[compute_borrow_infos] enter name={:?}", proc_def_id);
 
+    println!("nihao");
+    let mut closure_type: Option<Ty<'tcx>> = None;
     let fn_sig: FnSig = if tcx.is_closure(proc_def_id) {
         let typeck_results: &TypeckResults<'_> = tcx.typeck(proc_def_id.expect_local());
+        closure_type = typeck_results.node_type_opt(tcx.hir().local_def_id_to_hir_id(proc_def_id.expect_local()));
         let fn_sigs = typeck_results.liberated_fn_sigs();
         *(fn_sigs.get(tcx.hir().local_def_id_to_hir_id(proc_def_id.expect_local())).unwrap())
     } else {
@@ -394,15 +398,29 @@ where
     // FIXME; "skip_binder" is most likely wrong
     // FIXME: Replace with FakeMirEncoder.
     for i in 0usize..fn_sig.inputs().len() {
-        fake_mir_args.push(mir::Local::from_usize(i + 1));
+        let topush = mir::Local::from_usize(i + 1);
+        println!("{:?}", topush);
+        fake_mir_args.push(topush);
         let arg_ty = fn_sig.inputs()[i];
         let ty = if let Some(replaced_arg_ty) = maybe_tymap.and_then(|tymap| tymap.get(arg_ty)) {
             replaced_arg_ty.clone()
         } else {
             arg_ty.clone()
         };
+        println!("{:?}", ty);
         fake_mir_args_ty.push(ty);
     }
+
+    match closure_type {
+        Some(ty) => {
+            println!("hhii");
+            // A closure function's first argument will always be its own type
+            fake_mir_args.push(mir::Local::from_usize(1));
+            fake_mir_args_ty.push(ty);
+        },
+        None => {}
+    }
+
     let return_ty = fn_sig.output().clone();  // FIXME: Shouldn't this also go through maybe_tymap?
 
     let mut visitor = BorrowInfoCollectingVisitor::new(tcx);

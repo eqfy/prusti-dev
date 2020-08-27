@@ -100,7 +100,7 @@ impl BuiltinEncoder {
     pub fn encode_builtin_predicate_name(&self, predicate: BuiltinPredicateKind) -> String {
         match predicate {
             BuiltinPredicateKind::BuiltinInt => "builtin$builtin_int".to_string(),
-            BuiltinPredicateKind::BuiltinTerminated => {"builtin$terminated"}.to_string(),
+            BuiltinPredicateKind::BuiltinTerminated => "builtin$terminated".to_string(),
         }
     }
 

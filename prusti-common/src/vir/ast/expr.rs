@@ -37,9 +37,6 @@ pub enum Expr {
     Cond(Box<Expr>, Box<Expr>, Box<Expr>, Position),
     /// ForAll: variables, triggers, body
     ForAll(Vec<LocalVar>, Vec<Trigger>, Box<Expr>, Position),
-    // // FIXME OnJoin may not be appropirate here
-    // /// OnJoin: variable, body
-    // OnJoin(LocalVar, Box<Expr>, Position),
     /// let variable == (expr) in body
     LetExpr(LocalVar, Box<Expr>, Box<Expr>, Position),
     /// FuncApp: function_name, args, formal_args, return_type, Viper position

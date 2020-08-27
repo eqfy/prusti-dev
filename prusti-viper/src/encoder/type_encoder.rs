@@ -301,6 +301,14 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                         let viper_field_name = format!("f${}", field_name);
                         // Note that we use a builtin Int here due to the limitation of not
                         // being able to construct any int type with the desired 'tcx lifetime
+                        self.encoder.fields.borrow_mut().entry(viper_field_name.clone())
+                            .or_insert_with(|| {
+                                vir::Field::new(
+                                    viper_field_name.clone(),
+                                    {
+                                        vir::Type::TypedRef("".to_string())
+                                    })
+                            });
                         let field = vir::Field::new(
                             viper_field_name,
                             {
@@ -395,6 +403,17 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
             ty::TyKind::Param(_) => {
                 // special case: type parameters shall be encoded as *abstract* predicates
                 vec![vir::Predicate::new_abstract(typ)]
+            }
+
+            ty::TyKind::Closure(ref defId, ref subst) => {
+                let closure_subst = subst.as_closure();
+                let mut i = -1;
+                let fields = closure_subst.upvar_tys().map(|ty| {
+                    i += 1;
+                    self.encoder.encode_closure_field(i, ty)
+                }).collect();
+                println!("{:?} {:?}", typ, fields);
+                vec![vir::Predicate::new_struct(typ, fields)]
             }
 
             ref ty_variant => {

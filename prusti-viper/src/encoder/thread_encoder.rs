@@ -1,4 +1,4 @@
-// © 2020, University of British Columbia
+// © 2020, The University of British Columbia & ETH Zurich
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -14,7 +14,7 @@ use rustc_middle::{mir, ty};
 use log::{trace, debug};
 
 pub enum ThreadEncoderError {
-    LoopInvariantInBranch(BasicBlockIndex),
+    SomeError(BasicBlockIndex),
 }
 
 pub struct ThreadEncoder<'p, 'tcx: 'p> {
@@ -41,6 +41,10 @@ impl<'p, 'tcx: 'p> ThreadEncoder<'p, 'tcx> {
 
     pub fn mir(&self) -> &mir::Body<'tcx> {
         self.procedure.get_mir()
+    }
+
+    pub fn has_thread_spawn_terminator (&self, bbi: BasicBlockIndex) -> bool {
+        false
     }
 
 }

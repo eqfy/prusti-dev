@@ -11,6 +11,7 @@ use rustc_middle::ty::{
 };
 use rustc_ast::ast::{IntTy, UintTy};
 use log::trace;
+use prusti_interface::data::ProcedureDefId;
 
 pub trait TypeVisitor<'tcx>: Sized {
     fn tcx(&self) -> TyCtxt<'tcx>;
@@ -56,6 +57,9 @@ pub trait TypeVisitor<'tcx>: Sized {
             }
             TyKind::Projection(data) => {
                 self.visit_projection(data);
+            }
+            TyKind::Closure(def_id, substs) => {
+                self.visit_closure(def_id, substs);
             }
             ref x => {
                 unimplemented!("{:?}", x);
@@ -113,6 +117,11 @@ pub trait TypeVisitor<'tcx>: Sized {
     fn visit_raw_ptr(&mut self, ty: Ty<'tcx>, mutability: Mutability) {
         trace!("visit_raw_ptr({:?}, {:?})", ty, mutability);
         walk_raw_ptr(self, ty, mutability);
+    }
+
+    fn visit_closure(&mut self, def_id: ProcedureDefId, substs: SubstsRef<'tcx>) {
+        trace!("visit_closure({:?})", def_id);
+        walk_closure(self, def_id, substs);
     }
 }
 
@@ -177,4 +186,14 @@ pub fn walk_raw_ptr<'tcx, V: TypeVisitor<'tcx>>(
     _: Mutability,
 ) {
     visitor.visit_ty(ty);
+}
+
+pub fn walk_closure<'tcx, V: TypeVisitor<'tcx>>(
+    visitor: &mut V,
+    def_id: ProcedureDefId,
+    substs: SubstsRef<'tcx>,
+) {
+    for upvar_ty in substs.as_closure().upvar_tys() {
+        visitor.visit_ty(upvar_ty);
+    }
 }
