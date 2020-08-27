@@ -432,6 +432,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         // Encode postcondition
         self.encode_postconditions(return_cfg_block, postcondition_strengthening);
 
+        // Encode local variables
         let local_vars: Vec<_> = self
             .locals
             .iter()
@@ -439,11 +440,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             .collect();
         for local in local_vars.iter() {
             let local_ty = self.locals.get_type(*local);
-            // TODO Change here? ERIC
-            if let ty::TyKind::Closure(..) = local_ty.kind {
-                // Do not encode closures
-                continue;
-            }
             let type_name = self.encoder.encode_type_predicate_use(local_ty).unwrap(); // will panic if attempting to encode unsupported type
             let var_name = self.locals.get_name(*local);
             self.cfg_method

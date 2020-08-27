@@ -412,7 +412,6 @@ impl<'p, 'v, 'r: 'v, 'tcx: 'v> TypeEncoder<'p, 'v, 'tcx> {
                     i += 1;
                     self.encoder.encode_closure_field(i, ty)
                 }).collect();
-                println!("{:?} {:?}", typ, fields);
                 vec![vir::Predicate::new_struct(typ, fields)]
             }
 
