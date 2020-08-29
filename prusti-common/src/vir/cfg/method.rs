@@ -233,7 +233,7 @@ impl CfgMethod {
 
     pub fn add_stmt(&mut self, index: CfgBlockIndex, stmt: Stmt) {
         if let &Stmt::Label(ref label_name) = &stmt {
-            assert!(
+             assert!(
                 self.is_fresh_local_name(label_name),
                 "label {} is not fresh",
                 label_name
@@ -321,6 +321,10 @@ impl CfgMethod {
         (0..self.basic_blocks.len())
             .map(|i| self.block_index(i))
             .collect()
+    }
+
+    pub fn get_index(&self, cfg_block_index: CfgBlockIndex) -> usize {
+        cfg_block_index.block_index
     }
 
     #[allow(dead_code)]
@@ -440,6 +444,64 @@ impl CfgMethod {
             }
         }
         None
+    }
+
+    pub fn adapt_block(&mut self, label: &str, start_index: usize, cfg_block: &mut CfgBlock) -> CfgBlockIndex {
+        assert!(label.chars().take(1).all(|c| c.is_alphabetic() || c == '_'));
+        assert!(label
+            .chars()
+            .skip(1)
+            .all(|c| c.is_alphanumeric() || c == '_'));
+        assert!(
+            self.basic_blocks_labels.iter().all(|l| l != label),
+            "Label {} \n{:#?} is already used",
+            label,
+            self.basic_blocks_labels
+        );
+
+        assert!(label != RETURN_LABEL);
+        let index = self.basic_blocks.len();
+        self.basic_blocks_labels.push(label.to_string());
+        let invs = cfg_block.invs.drain(..).collect();
+        let stmts = cfg_block.stmts.drain(..).collect();
+        let successor = self.adapt_successor(start_index, cfg_block.successor.clone());
+        self.basic_blocks.push(CfgBlock {
+            invs,
+            stmts,
+            successor,
+        });
+        self.block_index(index)
+    }
+
+    // todo move following adapt methods to thread encoder
+    fn adapt_successor(&self, start_index: usize, successor: Successor) -> Successor {
+        match successor {
+            Successor::Undefined => {Successor::Undefined}
+            Successor::Return => {Successor::Return}
+            Successor::Goto(index) => {
+                Successor::Goto(self.block_index(start_index + index.block_index))
+            }
+            Successor::GotoSwitch(gotos, default) => {
+                let result = gotos.iter().map(|(expr, index)| {
+                    (expr.clone(), self.block_index(index.block_index + start_index))
+                }).collect();
+                Successor::GotoSwitch(result, self.block_index(default.block_index + start_index))
+            }
+        }
+    }
+
+    fn adapt_invs(invs: Vec<Expr>) -> Vec<Expr> {
+        // todo use expr transformer
+        vec![]
+    }
+
+    fn adapt_stmts(stmts: Vec<Stmt>) -> Vec<Stmt> {
+        // todo use cfg visitor
+        vec![]
+    }
+
+    fn adapt_local(local: Vec<Stmt>) -> Vec<Stmt> {
+        vec![]
     }
 }
 

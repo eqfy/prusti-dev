@@ -517,6 +517,19 @@ impl Expr {
         finder.predicates
     }
 
+    /// Replaces the name of the field's local var for a given field
+    pub fn set_predicate_field_name(&self, name: String) -> Option<Expr> {
+        if let Expr::Field(ref base, ref field, ref pos) = self {
+                println!("set predicate base name: {:?}\n{:?}\n", base, field);
+            if let Expr::Local(local, local_pos) = &**base {
+                let local_expr = Box::new(Expr::Local(LocalVar::new(name, local.typ.clone()), *local_pos));
+                return Some(Expr::Field(local_expr, field.clone(), *pos))
+            }
+        }
+        None
+    }
+
+
     /// Split place into place components.
     pub fn explode_place(&self) -> (Expr, Vec<PlaceComponent>) {
         match self {

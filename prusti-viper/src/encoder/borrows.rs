@@ -399,7 +399,6 @@ where
     // FIXME: Replace with FakeMirEncoder.
     for i in 0usize..fn_sig.inputs().len() {
         let topush = mir::Local::from_usize(i + 1);
-        println!("{:?}", topush);
         fake_mir_args.push(topush);
         let arg_ty = fn_sig.inputs()[i];
         let ty = if let Some(replaced_arg_ty) = maybe_tymap.and_then(|tymap| tymap.get(arg_ty)) {
@@ -407,13 +406,11 @@ where
         } else {
             arg_ty.clone()
         };
-        println!("{:?}", ty);
         fake_mir_args_ty.push(ty);
     }
 
     match closure_type {
         Some(ty) => {
-            println!("hhii");
             // A closure function's first argument will always be its own type
             fake_mir_args.push(mir::Local::from_usize(1));
             fake_mir_args_ty.push(ty);

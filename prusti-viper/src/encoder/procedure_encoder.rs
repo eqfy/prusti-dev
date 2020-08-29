@@ -64,7 +64,9 @@ use rustc_span::{MultiSpan, Span};
 use prusti_interface::specs::typed;
 use ::log::{trace, debug};
 use prusti_common::vir::FoldingBehaviour::Stmt;
-use prusti_common::vir::Type::Bool;
+use prusti_common::vir::Type::{Bool, TypedRef};
+use prusti_common::vir::BinOpKind::EqCmp;
+use prusti_common::vir::{LocalVar, Field, Predicate, PermAmount};
 
 type Result<T> = std::result::Result<T, EncodingError>;
 
@@ -105,9 +107,13 @@ pub struct ProcedureEncoder<'p, 'v: 'p, 'tcx: 'v> {
     old_ghost_vars: HashMap<String, vir::Type>,
     /// For each loop head, the block at whose end the loop invariant holds
     cached_loop_invariant_block: HashMap<BasicBlockIndex, BasicBlockIndex>,
-    closure_type_definitions: HashMap<ty::Ty<'tcx>, (ProcedureDefId, Rc<Vec<String>>)>,
+    /// Information about the closure types with their corresponding DefId and operands
+    closure_type_definitions: HashMap<ty::Ty<'tcx>, (ProcedureDefId, std::vec::Vec<rustc_middle::mir::Operand<'tcx>>)>,
+    // TODO following field is redundant, it will be removed
+    /// The thread spawning closure's information
+    thread_spawning_closure: Option<(ProcedureDefId, ty::Ty<'tcx>)>,
     thread_encoder: ThreadEncoder<'p, 'tcx>,
-    thread_spawning_closure: Option<(ProcedureDefId, Rc<Vec<String>>)>,
+    is_thread_closure: bool,
 }
 
 impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
@@ -115,6 +121,11 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         debug!("ProcedureEncoder constructor");
 
         let mir = procedure.get_mir();
+        if false {
+            // use one of these to replace all locals with new name
+            // rustc_mir::transform::generator::replace_base()
+            // rustc_mir::transform::generator::replace_local()
+        }
         let def_id = procedure.get_id();
         let tcx = encoder.env().tcx();
         let mir_encoder = MirEncoder::new(encoder, mir, def_id);
@@ -169,6 +180,8 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             closure_type_definitions: HashMap::new(),
             thread_encoder: ThreadEncoder::new(procedure, tcx),
             thread_spawning_closure: None,
+            is_thread_closure: false,
+
         })
     }
 
@@ -227,6 +240,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
 
     fn mut_contract(&mut self) -> &mut ProcedureContract<'tcx> {
         self.procedure_contract.as_mut().unwrap()
+    }
+
+    pub fn set_proc_is_thread_closure(&mut self, val: bool) {
+        self.is_thread_closure = val;
     }
 
     pub fn encode(mut self) -> Result<vir::CfgMethod> {
@@ -468,7 +485,10 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             .polonius_info()
             .loan_locations()
             .iter()
-            .map(|(loan, location)| (loan.into(), *location))
+            .map(|(loan, location)| {
+                println!("loan: {:?} location: {:?}", loan, location);
+                (loan.into(), *location)
+            })
             .collect();
         let method_pos = self
             .encoder
@@ -512,6 +532,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             );
         }
 
+        trace!("Finished encoding procedure {}", method_name);
         Ok(final_method)
     }
 
@@ -936,7 +957,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         let mir_successor: MirSuccessor = self.encode_block_terminator(bbi, curr_block)?;
         // Encodes a thread if there is one
         match &self.thread_spawning_closure {
-            Some((defid, args)) => {
+            Some((defid, ty)) => {
                 self.cfg_method.add_stmt(
                     return_block,
                     vir::Stmt::Comment("This block spawns a thread".to_string()),
@@ -944,7 +965,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 self.encode_thread(
                     label_prefix,
                     *defid,
-                    args.clone(),
+                    ty,
                     bbi,
                     return_block,
                 );
@@ -2043,7 +2064,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                         }
                         println!("{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n{:?}\n", fake_exprs, fake_vars, const_arg_vars, type_invs, constant_args, arg_tys);
 
-                        self.thread_spawning_closure = Some((*closure_def_id, operand_place_names.clone()));
+                        self.thread_spawning_closure = Some((*closure_def_id, closure_type.clone()));
 
                         //  store this info in a thread struct
 
@@ -2264,40 +2285,37 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
     /// B1
     /// g = havoc_bool()
     /// if (g) {
+    ///     Pre {local decl; inhale captured assignment}
     ///     B2
-    ///     exhale A
-    ///     assume false
+    ///     Post1 {exhale A; assume false}
     /// } else {
-    ///     inhale A
+    ///     Post2 {exhale captured permissions; inhale terminated --* A}
     /// }
     /// ```
-    /// Encoding path: start -> B1 -> G -> B2 -> A
+    /// Encoding path: start & B1 -> Pre -> B2 -> Post1 -> Post2
     fn encode_thread(
         &mut self,
         label_prefix: &str,
         closure_defid: ProcedureDefId, // maybe change this instead to (ProcedureDefId, Place)
-        args: Rc<Vec<String>>,
+        ty: ty::Ty<'tcx>,
         start_block: BasicBlockIndex,
         return_block: CfgBlockIndex,
     ) -> Result<(CfgBlockIndex, Vec<(CfgBlockIndex, BasicBlockIndex)>)> {
         trace!("Encoding thread: {:?}", closure_defid);
-        println!("{:?}\n{:?}\n{:?}\n{:?}\n", label_prefix, closure_defid, start_block, return_block);
         // consider include closure_defid if possible
-        let thread_label_prefix = format!("{}thread", label_prefix);
-
-
-        // let closure_procedure = self.encoder.env().get_procedure(closure_defid);
-        // let closure_body: Vec<BasicBlockIndex> = closure_procedure.get_reachable_nonspec_cfg_blocks();
-        let loop_info = self.loop_encoder.loops();
-        // probably wrong
-        let loop_depth = 0;
-        // Identify important blocks
-        // todo
+        // FIXME use a more readable prefixing theme like {label_prefix}_t_{thread_spawn_index}
+        // where thread_spawn_index starts from 0 and increases by 1 for each spawn
+        let ty_name_1 = self.encoder.encode_type_predicate_use(ty).unwrap();
+        let ty_name = ty_name_1.as_str();
+        let subst_hash = ty_name.get((ty_name.rfind('$').unwrap() + 1)..).unwrap();
+        let thread_label_prefix = format!("{}_t_{}", label_prefix, subst_hash);
 
         // The main path in the encoding is: start - B1 - G - B2 - A
         // We will build the encoding from left to right
         let mut heads: Vec<Option<CfgBlockIndex>> = vec![];
 
+        // Start and B1
+        // TODO maybe create separate block for B1, B1 not implemented yet
         let start_block = self.cfg_method.add_block(
             &format!("{}_start", thread_label_prefix),
             vec![],
@@ -2307,8 +2325,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             ))]
         );
         heads.push(Some(start_block));
-
-        // Todo Encoding of b1 currently unsupported
 
         // Encode the havoc bool
         let havoc_bool_method_name = self.encoder.encode_builtin_method_use(BuiltinMethodKind::HavocBool);
@@ -2322,8 +2338,17 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         println!("{:?}", havoc_bool_assign_stmts);
         self.cfg_method.add_stmts(start_block, havoc_bool_assign_stmts);
 
+        // //  B1
+        // let pre_init_block = self.cfg_method.add_block(
+        //     &format!("{}_pre_init_block", thread_label_prefix),
+        //     vec![],
+        //     vec![vir::Stmt::comment(format!(
+        //         "========== {}_pre_init_block ==========",
+        //         thread_label_prefix
+        //     ))]
+        // );
 
-        // encode thread body
+        // B2
         let body_init_block = self.cfg_method.add_block(
             &format!("{}_init_block", thread_label_prefix),
             vec![],
@@ -2333,25 +2358,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             ))]
         );
 
-        let body_verify_block = self.cfg_method.add_block(
-            &format!("{}_verify_block", thread_label_prefix),
-            vec![],
-            vec![vir::Stmt::comment(format!(
-                "========== {}_verify_block ==========",
-                thread_label_prefix
-            ))]
-        );
-
-        let body_else_block = self.cfg_method.add_block(
-            &format!("{}_inhale_block", thread_label_prefix),
-            vec![],
-            vec![vir::Stmt::comment(format!(
-                "========== {}_inhale_block ==========",
-                thread_label_prefix
-            ))]
-        );
-        self.encode_thread_post_condition_inhale_stmts(closure_defid, args.clone());
-
+        // Post1
         let end_body_block = self.cfg_method.add_block(
             &format!("{}_end_body", thread_label_prefix),
             vec![],
@@ -2361,54 +2368,145 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             ))],
         );
 
-        let switch = vir::Successor::GotoSwitch(vec![(vir::Expr::local(thread_havoc_bool), body_init_block)], body_else_block);
+        // Post2
+        let post_cond_inhale_block = self.cfg_method.add_block(
+            &format!("{}_inhale_block", thread_label_prefix),
+            vec![],
+            vec![vir::Stmt::comment(format!(
+                "========== {}_inhale_block ==========",
+                thread_label_prefix
+            ))]
+        );
+
+        // Resolve edges
+        let switch = vir::Successor::GotoSwitch(vec![(vir::Expr::local(thread_havoc_bool), body_init_block)], post_cond_inhale_block);
         self.cfg_method.set_successor(start_block, switch);
-        self.cfg_method.set_successor(body_init_block, vir::Successor::Goto(body_verify_block));
-        self.cfg_method.set_successor(body_else_block, vir::Successor::Goto(end_body_block));
-        // self.cfg_method.set_successor()
+        self.cfg_method.set_successor(post_cond_inhale_block, vir::Successor::Goto(end_body_block));
 
-        self.encode_closure_procedure(closure_defid, args.clone(), body_init_block, end_body_block);
-
-        // let (g_head, g_edges) = self.encode_blocks_group(
-        //     &format!("{}_group2_", thread_label_prefix),
-        //     loop_guard_evaluation,
-        //     loop_depth,
-        //     return_block,
-        // )?;
-        // heads.push(g_head);
+        // Encode thread
+        self.encode_thread_closure_procedure(thread_label_prefix.as_str(), &ty, body_init_block, end_body_block);
 
         self.thread_spawning_closure = None;
         Ok((return_block, vec![]))
     }
 
-    fn encode_closure_procedure(
-        &self,
-        closure_def_id: ProcedureDefId,
-        args: Rc<Vec<String>>,
+    // Regarding the encoding of the closure body:
+    // In Prusti, we encode all locals as refs to some predicate. This means that the the locals can
+    // be replaced easily with new types. Since thread spawn only uses 0-argument closures for the
+    // spawn. We are certain that all places besides _0 and _1 are not tampered when we inhale the
+    // precondition while encoding the thread body. To take advantage of this fact and simplify the
+    // the encoding task, the encoded thread body is directly inlined into a the cfg of the calling
+    // function. The next step is to completely fix this issue by renaming all of local variables,
+    // temporary variables and labels. The way to do this is with an implementation of the CFG
+    // visitor which will modify the encoded cfg block. This step will happen before fold_unfold
+    // so that we can work on simpler CFG blocks
+    //
+    fn encode_thread_closure_procedure(
+        &mut self,
+        label_prefix: &str,
+        ty: ty::Ty<'tcx>,
         start_block: CfgBlockIndex,
         return_block: CfgBlockIndex,
     ) -> Result<(CfgBlockIndex, Vec<(CfgBlockIndex, BasicBlockIndex)>)> {
-        let closure_procedure = self.encoder.env().get_procedure(closure_def_id);
-        let procedure_encoder = ProcedureEncoder::new(self.encoder, &closure_procedure).unwrap();
-        let encoded_closure_procedure = procedure_encoder.encode().unwrap();
-        let closure_blocks = encoded_closure_procedure.basic_blocks;
-        println!("Closure blocks\n{:?}", closure_blocks);
+        let (def_id, _) = self.closure_type_definitions.get(ty).unwrap();
 
+        let closure_procedure = self.encoder.env().get_procedure(*def_id);
+        let mut procedure_encoder = ProcedureEncoder::new(self.encoder, &closure_procedure).unwrap();
+        procedure_encoder.set_proc_is_thread_closure(true);
+        let encoded_closure_procedure = procedure_encoder.encode().unwrap();
+        let mut closure_blocks = encoded_closure_procedure.basic_blocks;
+
+        // FIXME add local declarations once replace works
+        let mut start_index = self.cfg_method.get_index(return_block) + 1;
+        let closure_pre_block = &mut closure_blocks.remove(0);
+        let adapted_closure_pre_block = self.cfg_method.adapt_block(
+            format!("{}_closure_pre", label_prefix).as_str(),
+            start_index,
+            closure_pre_block);
+
+        let closure_post = &mut closure_blocks.remove(0);
+        let adapted_closure_post_block = self.cfg_method.adapt_block(
+            format!("{}_closure_post", label_prefix).as_str(),
+            start_index,
+            closure_post);
+
+        let mut closure_body_blocks = Vec::new();
+        for (i, closure_block) in closure_blocks.iter_mut().enumerate() {
+            let label = format!("{}_{}", label_prefix, i);
+            closure_body_blocks.push(
+                self.cfg_method.adapt_block(label.as_str(), start_index, closure_block)
+            );
+        }
+
+        self.cfg_method.add_stmts(
+            start_block,
+            self.encode_thread_closure_capture_inhales(ty)
+        );
+
+        self.cfg_method.set_successor(
+            start_block,
+            vir::Successor::Goto(adapted_closure_pre_block)
+        );
+
+        self.cfg_method.set_successor(
+            adapted_closure_post_block,
+            vir::Successor::Goto(return_block)
+        );
 
         Ok((return_block, vec![]))
     }
 
-    fn encode_thread_post_condition_inhale_stmts(
+    fn encode_thread_closure_capture_inhales(
         &self,
-        closure_def_id: ProcedureDefId,
-        args: Rc<Vec<String>>,
+        ty: ty::Ty<'tcx>,
     ) -> Vec<vir::Stmt> {
-        let stmts: Vec<vir::Stmt>;
-        let closure_procedure = self.encoder.env().get_procedure(closure_def_id);
-        let closure_args = closure_procedure.get_procedure_args();
-        println!("{:?}", closure_args);
-        vec![]
+        let (_def_id, operands) = self.closure_type_definitions.get(ty).unwrap();
 
+        // TODO use proper name of the closure argument once replace works
+        // Encode the values captured by the closure
+        let closure_arg_name = "_1";
+        let operand_place: Vec<_> = operands.iter().map(|operand| {
+            self.mir_encoder.encode_operand_place(operand).unwrap()
+        }).collect();
+        let closure_ty_name = self.encoder.encode_type_predicate_use(ty).unwrap();
+        let ty_predicates_map = self.encoder.get_used_viper_predicates_map();
+        let closure_predicate = ty_predicates_map.get(closure_ty_name.as_str()).unwrap();
+        let closure_pred_fields: Vec<Expr> = match closure_predicate {
+            Predicate::Struct(struct_predicate) => {
+                let body = &struct_predicate.body;
+                let body_expr = body.as_ref().unwrap();
+                // only write permission is possible since threads closures always moves
+                let fields = body_expr.extract_predicate_places(PermAmount::Write);
+                Some(fields.iter().map(|field| {
+                    field.set_predicate_field_name(closure_arg_name.to_string()).unwrap()
+                }).collect())
+            },
+            _ => {None}
+        }.unwrap();
+
+        let mut inhale_stmt = Vec::new();
+        for (index, (operand, field)) in operand_place
+            .iter()
+            .zip(closure_pred_fields.iter())
+            .enumerate()
+        {
+            inhale_stmt.push(vir::Expr::BinOp(
+                EqCmp,
+                Box::new(operand.clone()),
+                Box::new(field.clone()),
+                vir::Position::default(),
+            ));
+        }
+        let captured_arg_values = inhale_stmt.into_iter().conjoin();
+
+        let args = vec![
+            vir::Expr::local(vir::LocalVar::new(closure_arg_name, TypedRef(closure_ty_name.clone())))
+        ];
+        vec![vir::Stmt::Inhale(
+            vir::Expr::unfolding(closure_ty_name, args, captured_arg_values,
+                                 vir::PermAmount::Write, None),
+            vir::FoldingBehaviour::None
+        )]
     }
 
     fn encode_cmp_function_call(
@@ -3032,7 +3130,6 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
         vir::Expr,
         Option<vir::Expr>,
     ) {
-        println!("The contract is {:?}", *contract);
         let borrow_infos = &contract.borrow_infos;
         let maybe_blocked_paths = if !borrow_infos.is_empty() {
             assert_eq!(
@@ -3060,6 +3157,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
             }
             false
         }
+        println!("Encoding pre");
         for local in &contract.args {
             println!("local {:?}", local);
             let mut add = |access: vir::Expr| {
@@ -3072,6 +3170,7 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 }
             };
             let access = self.encode_local_variable_permission(*local);
+            println!("{:?}", access);
             match access {
                 vir::Expr::BinOp(vir::BinOpKind::And, box access1, box access2, _) => {
                     add(access1);
@@ -3131,6 +3230,15 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                 )),
             )
         });
+        // println!("hola\n{:#?}", func_spec);
+        // if self.is_thread_closure {
+        //     // _1 and _2
+        //     let exprs = vec![];
+        //     let closure_arg = &contract.args[0];
+        //     let encoded_local = self.encode_prusti_local(*closure_arg);
+        //     vir::Expr::BinOp(EqCmp, F)
+        //
+        // }
         (
             type_spec.into_iter().conjoin(),
             mandatory_type_spec,
@@ -5167,14 +5275,21 @@ impl<'p, 'v: 'p, 'tcx: 'v> ProcedureEncoder<'p, 'v, 'tcx> {
                     // FIXME closures are used in thread spawns (which are not specs)
                     // Todo keep track of closure info here
                     // println!("\n\n{:?}\n{:?}\n{:?}\n{:?}", def_id, _substs, operands, ty);
-                    let mut operand_place_names = vec![];
-                    for (field_num, operand) in operands.iter().enumerate() {
-                        // let expr = self.mir_encoder.encode_operand_expr(operand);
-                        // println!("encode aggregate {} {:?}\n{:?}", field_num, operand, expr);
-                        operand_place_names.push(format!("{:?}", operand));
-                    }
-                    let operand_place_names = Rc::new(operand_place_names);
-                    self.closure_type_definitions.insert(ty, (def_id, operand_place_names));
+                    // let mut operand_place_names = vec![];
+                    // let mut operand_s = vec![];
+                    // for (field_num, operand) in operands.iter().enumerate() {
+                    //     // let expr = self.mir_encoder.encode_operand_expr(operand);
+                    //     println!("encode aggregate {} {:?}\n{:?}", field_num, operand, location);
+                    //     println!("{:?}\t{:?}", operand, operand.clone());
+                    //     operand_place_names.push(format!("{:?}", operand));
+                    //     operand_s.push(operand.clone());
+                    // }
+                    operands.iter().map(|operand| {
+                        operand.clone()
+                    });
+                    // println!("The closure operands are {:?}", operand_s);
+                    // let operand_place_names = Rc::new(operand_place_names);
+                    self.closure_type_definitions.insert(ty, (def_id, operands.to_vec()));
                     Vec::new()
                 }
             }

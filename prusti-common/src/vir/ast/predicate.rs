@@ -86,7 +86,7 @@ impl Predicate {
         )
     }
     /// Construct a predicate that corresponds to a composite type that has only one variant such
-    /// as `struct` or `tuple`.
+    /// as `struct` or `tuple` or `closure`
     pub fn new_struct(typ: Type, fields: Vec<Field>) -> Predicate {
         Predicate::Struct(StructPredicate::new(typ, fields))
     }

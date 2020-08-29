@@ -1015,9 +1015,13 @@ impl<'v, 'tcx> Encoder<'v, 'tcx> {
     pub fn encode_builtin_predicate_use(&self, predicate_kind: BuiltinPredicateKind) -> String {
         trace!("encode_builtin_predicate_use({:?})", predicate_kind);
         // Trigger encoding of definition
-        self.encode_builtin_predicate_def(predicate_kind);
+        let predicate = self.encode_builtin_predicate_def(predicate_kind);
         let builtin_encoder = BuiltinEncoder::new();
-        builtin_encoder.encode_builtin_predicate_name(predicate_kind)
+        let predicate_name = builtin_encoder.encode_builtin_predicate_name(predicate_kind);
+        if !self.type_predicates.borrow().contains_key(&predicate_name) {
+            self.type_predicates.borrow_mut().insert(predicate_name.clone(), predicate);
+        };
+        predicate_name
     }
 
     pub fn encode_builtin_method_def(&self, method_kind: BuiltinMethodKind) -> vir::BodylessMethod {
